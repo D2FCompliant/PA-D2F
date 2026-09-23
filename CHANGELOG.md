@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.2 — 2026-09-23
+
+### Fixed
+
+- Defer the libxml2 WebAssembly engine initialization until a Flux 1 validation request, so the Cloudflare Worker can start without an unsettled module-level await.
+- Keep the DGFiP XSD, EN 16931 and France Schematron stages intact and awaited before returning the validation result.
+
+Support: D2F-001064
+
 ## 0.2.1 — 2026-09-23
 
 ### Fixed

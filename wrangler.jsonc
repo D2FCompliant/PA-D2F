@@ -19,7 +19,7 @@
     "head_sampling_rate": 1
   },
   "vars": {
-    "APP_VERSION": "0.2.1",
+    "APP_VERSION": "0.2.2",
     "ENVIRONMENT": "development",
     "EXTERNAL_NETWORK_DISABLED": "true",
     "API_KEY_HEADER": "x-api-key",
@@ -41,7 +41,7 @@
         "globalThis.process.type": "\"renderer\""
       },
       "vars": {
-        "APP_VERSION": "0.2.1",
+        "APP_VERSION": "0.2.2",
         "ENVIRONMENT": "sandbox",
         "EXTERNAL_NETWORK_DISABLED": "true",
         "API_KEY_HEADER": "x-api-key",

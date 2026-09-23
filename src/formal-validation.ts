@@ -1,12 +1,4 @@
 import { XMLParser } from "fast-xml-parser";
-import {
-  ParseOption,
-  XmlBufferInputProvider,
-  XmlDocument,
-  XmlLibError,
-  XsdValidator,
-  xmlRegisterInputProvider,
-} from "libxml2-wasm";
 import SaxonJS from "saxon-js";
 import { XSD_TEXT_BY_PATH } from "./generated/xsd-bundle";
 import en16931Ubl from "./generated/schematron/en16931-ubl.sef.json";
@@ -26,7 +18,19 @@ const encoder = new TextEncoder();
 const xsdBuffers = Object.fromEntries(
   Object.entries(XSD_TEXT_BY_PATH).map(([path, source]) => [`${XSD_BASE}${path}`, encoder.encode(source)]),
 );
-xmlRegisterInputProvider(new XmlBufferInputProvider(xsdBuffers));
+type Libxml = typeof import("libxml2-wasm");
+let libxmlPromise: Promise<Libxml> | undefined;
+let inputProviderRegistered = false;
+
+async function getLibxml(): Promise<Libxml> {
+  libxmlPromise ??= import("libxml2-wasm");
+  const libxml = await libxmlPromise;
+  if (!inputProviderRegistered) {
+    libxml.xmlRegisterInputProvider(new libxml.XmlBufferInputProvider(xsdBuffers));
+    inputProviderRegistered = true;
+  }
+  return libxml;
+}
 
 const schemaRoots: Partial<Record<InvoiceFormat, string>> = {
   UBL: "F1_BASE_UBL_2.1/F1BASE_UBL-invoice-2.1.xsd",
@@ -46,8 +50,8 @@ function validationIssue(input: Partial<ValidationIssue> & Pick<ValidationIssue,
   };
 }
 
-function xsdIssues(error: unknown): ValidationIssue[] {
-  if (error instanceof XmlLibError && error.details.length) {
+function xsdIssues(error: unknown, libxml: Libxml): ValidationIssue[] {
+  if (error instanceof libxml.XmlLibError && error.details.length) {
     return error.details.map((detail, index) => validationIssue({
       code: `XSD-${String(index + 1).padStart(3, "0")}`,
       source: "xsd",
@@ -60,19 +64,20 @@ function xsdIssues(error: unknown): ValidationIssue[] {
   return [validationIssue({ code: "XSD-ENGINE-ERROR", source: "xsd", rule: "DGFiP-FLUX1-XSD", message: error instanceof Error ? error.message : "XSD validation failed", standard: "DGFiP Flux 1 XSD" })];
 }
 
-function validateXsd(payload: string, format: InvoiceFormat): ValidationIssue[] {
+async function validateXsd(payload: string, format: InvoiceFormat): Promise<ValidationIssue[]> {
   const root = schemaRoots[format];
   if (!root) return [validationIssue({ code: "XSD-FORMAT-NOT-SUPPORTED", source: "xsd", rule: "DGFiP-FLUX1-XSD", message: `No DGFiP Flux 1 XSD root is configured for ${format}.` })];
-  const schema = XmlDocument.fromString(XSD_TEXT_BY_PATH[root] || "", { url: `${XSD_BASE}${root}`, option: ParseOption.XML_PARSE_NONET | ParseOption.XML_PARSE_NO_XXE });
-  let validator: XsdValidator | null = null;
-  let document: XmlDocument | null = null;
+  const libxml = await getLibxml();
+  const schema = libxml.XmlDocument.fromString(XSD_TEXT_BY_PATH[root] || "", { url: `${XSD_BASE}${root}`, option: libxml.ParseOption.XML_PARSE_NONET | libxml.ParseOption.XML_PARSE_NO_XXE });
+  let validator: InstanceType<Libxml["XsdValidator"]> | null = null;
+  let document: InstanceType<Libxml["XmlDocument"]> | null = null;
   try {
-    validator = XsdValidator.fromDoc(schema);
-    document = XmlDocument.fromString(payload, { url: "memory:///submitted-invoice.xml", option: ParseOption.XML_PARSE_NONET | ParseOption.XML_PARSE_NO_XXE });
+    validator = libxml.XsdValidator.fromDoc(schema);
+    document = libxml.XmlDocument.fromString(payload, { url: "memory:///submitted-invoice.xml", option: libxml.ParseOption.XML_PARSE_NONET | libxml.ParseOption.XML_PARSE_NO_XXE });
     validator.validate(document);
     return [];
   } catch (error) {
-    return xsdIssues(error);
+    return xsdIssues(error, libxml);
   } finally {
     document?.dispose();
     validator?.dispose();
@@ -137,8 +142,8 @@ function runSchematron(payload: string, stylesheetInternal: unknown, source: "en
   }
 }
 
-export function validateFormalInvoice(payload: string, format: InvoiceFormat): { stages: ValidationStage[]; issues: ValidationIssue[] } {
-  const xsd = validateXsd(payload, format);
+export async function validateFormalInvoice(payload: string, format: InvoiceFormat): Promise<{ stages: ValidationStage[]; issues: ValidationIssue[] }> {
+  const xsd = await validateXsd(payload, format);
   const stages: ValidationStage[] = [{ id: "xml", status: "PASS", standard: "XML", version: "1.0", issueCount: 0 }];
   stages.push({ id: "xsd", status: xsd.some((item) => item.severity === "error") ? "FAIL" : "PASS", standard: "DGFiP Flux 1 XSD", version: "3.2", issueCount: xsd.length });
   if (format !== "UBL") {

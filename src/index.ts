@@ -145,7 +145,7 @@ async function validateFlux1(request: Request, env: Env, repository: SandboxRepo
 
   const formal = initialIssues.some((issue) => issue.severity === "error")
     ? { stages: [{ id: "xml", status: "FAIL", standard: "XML", version: "1.0", issueCount: initialIssues.length }], issues: [] }
-    : validateFormalInvoice(payload, format);
+    : await validateFormalInvoice(payload, format);
   const flux1 = format === "UBL" ? extractFlux1(payload) : { standard: "DGFiP Flux 1", version: "1.2", syntax: format, fields: {}, source: "20260430_Annexe-1-Flux-1-v1.2.xlsx" };
   const allIssues: ValidationIssue[] = [...initialIssues, ...formal.issues];
   const ppfSimulation = simulatePpf(flux1 as ReturnType<typeof extractFlux1>, allIssues.some((issue) => issue.severity === "error"));
