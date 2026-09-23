@@ -46,7 +46,7 @@
         {
           "binding": "DB",
           "database_name": "d2f-pa-sandbox",
-          "database_id": "00000000-0000-0000-0000-000000000000",
+          "database_id": "b082f7af-bf47-4e3a-b24b-956cb0d2a2b2",
           "migrations_dir": "migrations"
         }
       ]
