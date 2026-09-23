@@ -1,0 +1,33 @@
+{
+  "name": "d2f-pa-sandbox",
+  "version": "0.4.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22 <23"
+  },
+  "scripts": {
+    "postinstall": "node scripts/patch-libxml2-worker.mjs",
+    "build": "tsc --noEmit",
+    "check": "npm run types:check && npm run build && npm test",
+    "dev": "wrangler dev --local",
+    "deploy:sandbox": "npm run check && wrangler deploy --env sandbox",
+    "lint": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "types": "wrangler types",
+    "types:check": "wrangler types --check"
+  },
+  "dependencies": {
+    "fast-xml-parser": "5.11.1",
+    "libxml2-wasm": "0.7.2",
+    "saxon-js": "2.7.0"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.2",
+    "typescript": "7.0.2",
+    "vitest": "5.0.1",
+    "wrangler": "4.136.3",
+    "xslt3": "2.7.0"
+  }
+}

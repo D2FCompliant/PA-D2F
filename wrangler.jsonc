@@ -1,0 +1,70 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "d2f-pa-sandbox",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-23",
+  "compatibility_flags": ["nodejs_compat"],
+  "define": {
+    "globalThis.process.type": "\"renderer\"",
+    "abstractNode": "globalThis.__saxonAbstractNode",
+    "HostPlatform": "globalThis.__saxonHostPlatform"
+  },
+  "rules": [
+    {
+      "type": "CompiledWasm",
+      "globs": ["**/*.wasm"],
+      "fallthrough": true
+    },
+    {
+      "type": "Text",
+      "globs": ["**/*.xsd"],
+      "fallthrough": true
+    }
+  ],
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  },
+  "vars": {
+    "APP_VERSION": "0.4.0",
+    "ENVIRONMENT": "development",
+    "EXTERNAL_NETWORK_DISABLED": "true",
+    "API_KEY_HEADER": "x-api-key",
+    "DGFiP_BASELINE": "3.2",
+    "CBM_VERSION": "2.1.0"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "d2f-pa-sandbox-local",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "env": {
+    "sandbox": {
+      "name": "d2f-pa-sandbox",
+      "define": {
+        "globalThis.process.type": "\"renderer\"",
+        "abstractNode": "globalThis.__saxonAbstractNode",
+        "HostPlatform": "globalThis.__saxonHostPlatform"
+      },
+      "vars": {
+        "APP_VERSION": "0.4.0",
+        "ENVIRONMENT": "sandbox",
+        "EXTERNAL_NETWORK_DISABLED": "true",
+        "API_KEY_HEADER": "x-api-key",
+        "DGFiP_BASELINE": "3.2",
+        "CBM_VERSION": "2.1.0"
+      },
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "d2f-pa-sandbox",
+          "database_id": "b082f7af-bf47-4e3a-b24b-956cb0d2a2b2",
+          "migrations_dir": "migrations"
+        }
+      ]
+    }
+  }
+}
