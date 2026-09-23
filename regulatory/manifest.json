@@ -22,6 +22,41 @@
       "status": "official-copy-retained"
     },
     {
+      "id": "dgfip.e-reporting-flux10",
+      "version": "3.2 / Annex 6 v1.10",
+      "publicationDate": "2026-04-30",
+      "activationDate": "2026-04-30",
+      "source": "DGFiP external specifications v3.2 archive",
+      "artifact": "official/dgfip/v3.2/20260430_Annexe 6 - Format sémantique FE e-reporting - V1.10.xlsx",
+      "artifactSha256": "eb6dfa0271070d2b0f71e6c065d540b46392a2465dce45e26091ebd456607e2e",
+      "flows": ["10.1", "10.2", "10.3", "10.4"],
+      "xsdRoot": "official/dgfip/v3.2/xsd/1 - E-reporting/ereporting.xsd",
+      "status": "official-copy-retained"
+    },
+    {
+      "id": "dgfip.management-rules",
+      "version": "3.2 / Annex 7 v1.9",
+      "publicationDate": "2026-04-30",
+      "activationDate": "2026-04-30",
+      "source": "DGFiP external specifications v3.2 archive",
+      "artifact": "official/dgfip/v3.2/20260430_Annexe 7 - Règles de gestion - V1.9.xlsx",
+      "artifactSha256": "4febf8ac055fba26da869d6baaaa1ad8d646a133a0728a6468978578969ed704",
+      "status": "official-copy-retained"
+    },
+    {
+      "id": "dgfip.annuaire-flux12-14",
+      "version": "3.2",
+      "publicationDate": "2026-04-30",
+      "activationDate": "2026-04-30",
+      "source": "DGFiP external specifications v3.2 archive",
+      "flows": ["12", "13", "14"],
+      "xsdRoots": [
+        "official/dgfip/v3.2/xsd/0 - Annuaire/actualisation/Annuaire_Actualisation_F12-F13.xsd",
+        "official/dgfip/v3.2/xsd/0 - Annuaire/consultation/Annuaire_Consultation_F14.xsd"
+      ],
+      "status": "official-copy-retained"
+    },
+    {
       "id": "fnfe.france-rfe-validation",
       "version": "1.4.0.04",
       "publicationDate": "2026-09-04",

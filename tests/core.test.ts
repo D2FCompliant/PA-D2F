@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { validateAnnuaire } from "../src/annuaire";
 import { constantTimeEqual, hmacSha256Hex, sha256Hex } from "../src/crypto";
+import { detectEReportingFlow, validateEReporting } from "../src/e-reporting";
 import { assertTransition, canTransition, REGULATORY_CODES } from "../src/lifecycle";
 import { extractFlux1, simulatePpf } from "../src/flux1";
 import { emscriptenCallbackModuleKey, validateFormalInvoice } from "../src/formal-validation";
@@ -44,6 +46,39 @@ describe("formal France validation and Flux 1", () => {
     expect(simulatePpf(flux1, false).status).toBe("ACCEPTED");
     const withoutBt49 = extractFlux1(validUbl);
     expect(simulatePpf(withoutBt49, false).issues[0]?.code).toBe("PPF_SIM_BT49_REQUIRED");
+  });
+});
+
+describe("official DGFiP e-reporting and Annuaire controls", () => {
+  const flux103 = `<?xml version="1.0"?><Report><ReportDocument><Id>D2F-ER-20260922</Id><IssueDateTime><DateTimeString>20260923090000</DateTimeString></IssueDateTime><TypeCode>IN</TypeCode><Sender><Id schemeId="0238">1234</Id><Name>D2F PA Sandbox</Name><RoleCode>WK</RoleCode></Sender><Issuer><Id schemeId="0002">123456789</Id><Name>Sandbox issuer</Name><RoleCode>SE</RoleCode></Issuer></ReportDocument><TransactionsReport><ReportPeriod><StartDate>20260901</StartDate><EndDate>20260922</EndDate></ReportPeriod><Transactions><Date>20260922</Date><TransactionsCurrency>EUR</TransactionsCurrency><CategoryCode>TLB1</CategoryCode><TaxExclusiveAmount>100.00</TaxExclusiveAmount><TaxTotal>20.00</TaxTotal><TransactionsCount>1</TransactionsCount><TaxSubtotal><TaxPercent>20</TaxPercent><TaxableAmount>100.00</TaxableAmount><TaxTotal>20.00</TaxTotal></TaxSubtotal></Transactions></TransactionsReport></Report>`;
+
+  it("classifies Flux 10.3 and executes the official XSD plus Annex 7 controls", async () => {
+    const result = await validateEReporting(flux103, new Date("2026-09-23T12:00:00Z"));
+    expect(result.flow).toBe("10.3");
+    expect(result.stages.find((stage) => stage.id === "xsd")?.status).toBe("PASS");
+    expect(result.stages.find((stage) => stage.id === "business-rules")?.status).toBe("PASS");
+    expect(result.stages.find((stage) => stage.id === "schematron")?.status).toBe("NOT_APPLICABLE");
+    expect(result.issues.some((issue) => issue.code.endsWith("ENGINE-ERROR"))).toBe(false);
+  });
+
+  it("distinguishes all four Flux 10 payload shapes", () => {
+    expect(detectEReportingFlow({ TransactionsReport: { Invoice: {} } })).toBe("10.1");
+    expect(detectEReportingFlow({ PaymentsReport: { Invoice: {} } })).toBe("10.2");
+    expect(detectEReportingFlow({ TransactionsReport: { Transactions: {} } })).toBe("10.3");
+    expect(detectEReportingFlow({ PaymentsReport: { Transactions: {} } })).toBe("10.4");
+  });
+
+  it("rejects a mixed transaction and payment transmission under G6.29", async () => {
+    const mixed = flux103.replace("</Report>", "<PaymentsReport><ReportPeriod><StartDate>20260901</StartDate><EndDate>20260922</EndDate></ReportPeriod><Transactions><Payment><Date>20260922</Date><SubTotals><TaxPercent>20</TaxPercent><CurrencyCode>EUR</CurrencyCode><Amount>120</Amount></SubTotals></Payment></Transactions></PaymentsReport></Report>");
+    const result = await validateEReporting(mixed, new Date("2026-09-23T12:00:00Z"));
+    expect(result.flow).toBe("UNKNOWN");
+    expect(result.issues.some((issue) => issue.rule === "G6.29")).toBe(true);
+  });
+
+  it("runs the official Annuaire Flux 12 schema without an engine failure", async () => {
+    const result = await validateAnnuaire("<AnnuaireActualisation><BlocCodesRoutage/></AnnuaireActualisation>", "12");
+    expect(result.stages.map((stage) => stage.id)).toEqual(["xml", "xsd", "business-rules", "schematron"]);
+    expect(result.issues.some((issue) => issue.code.endsWith("ENGINE-ERROR"))).toBe(false);
   });
 });
 

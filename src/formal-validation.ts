@@ -1,6 +1,7 @@
 import { XMLParser } from "fast-xml-parser";
 import SaxonJS from "saxon-js";
 import { XSD_TEXT_BY_PATH } from "./generated/xsd-bundle";
+import { EXTERNAL_XSD_TEXT_BY_PATH } from "./generated/external-xsd-bundle";
 import en16931Ubl from "./generated/schematron/en16931-ubl.sef.json";
 import brFrUbl from "./generated/schematron/br-fr-ubl.sef.json";
 import type { InvoiceFormat, ValidationIssue } from "./types";
@@ -15,7 +16,7 @@ declare global {
 }
 
 export type ValidationStage = {
-  id: "xml" | "xsd" | "en16931" | "schematron";
+  id: "xml" | "xsd" | "en16931" | "schematron" | "business-rules";
   status: "PASS" | "FAIL" | "NOT_APPLICABLE";
   standard: string;
   version: string;
@@ -25,7 +26,7 @@ export type ValidationStage = {
 const XSD_BASE = "memory:///";
 const encoder = new TextEncoder();
 const xsdBuffers = Object.fromEntries(
-  Object.entries(XSD_TEXT_BY_PATH).map(([path, source]) => [`${XSD_BASE}${path}`, encoder.encode(source)]),
+  Object.entries({ ...XSD_TEXT_BY_PATH, ...EXTERNAL_XSD_TEXT_BY_PATH }).map(([path, source]) => [`${XSD_BASE}${path}`, encoder.encode(source)]),
 );
 type Libxml = typeof import("libxml2-wasm");
 let libxmlPromise: Promise<Libxml> | undefined;
@@ -125,39 +126,54 @@ function validationIssue(input: Partial<ValidationIssue> & Pick<ValidationIssue,
   };
 }
 
-function xsdIssues(error: unknown, libxml: Libxml): ValidationIssue[] {
+type XsdValidationProfile = {
+  root: string;
+  rule: string;
+  standard: string;
+  standardVersion: string;
+  documentUrl?: string;
+};
+
+function xsdIssues(error: unknown, libxml: Libxml, profile: XsdValidationProfile): ValidationIssue[] {
   if (error instanceof libxml.XmlLibError && error.details.length) {
     return error.details.map((detail, index) => validationIssue({
       code: `XSD-${String(index + 1).padStart(3, "0")}`,
       source: "xsd",
-      rule: "DGFiP-FLUX1-XSD",
+      rule: profile.rule,
       message: detail.message.trim(),
       path: detail.xpath || (detail.line ? `line:${detail.line}${detail.col ? `:${detail.col}` : ""}` : "/"),
-      standard: "DGFiP Flux 1 XSD",
+      standard: profile.standard,
+      standardVersion: profile.standardVersion,
     }));
   }
-  return [validationIssue({ code: "XSD-ENGINE-ERROR", source: "xsd", rule: "DGFiP-FLUX1-XSD", message: error instanceof Error ? error.message : "XSD validation failed", standard: "DGFiP Flux 1 XSD" })];
+  return [validationIssue({ code: "XSD-ENGINE-ERROR", source: "xsd", rule: profile.rule, message: error instanceof Error ? error.message : "XSD validation failed", standard: profile.standard, standardVersion: profile.standardVersion })];
 }
 
-async function validateXsd(payload: string, format: InvoiceFormat): Promise<ValidationIssue[]> {
-  const root = schemaRoots[format];
-  if (!root) return [validationIssue({ code: "XSD-FORMAT-NOT-SUPPORTED", source: "xsd", rule: "DGFiP-FLUX1-XSD", message: `No DGFiP Flux 1 XSD root is configured for ${format}.` })];
+export async function validateXsdDocument(payload: string, profile: XsdValidationProfile): Promise<ValidationIssue[]> {
+  const source = XSD_TEXT_BY_PATH[profile.root] || EXTERNAL_XSD_TEXT_BY_PATH[profile.root];
+  if (!source) return [validationIssue({ code: "XSD-SCHEMA-NOT-FOUND", source: "xsd", rule: profile.rule, message: `The configured schema ${profile.root} is not bundled.`, standard: profile.standard, standardVersion: profile.standardVersion })];
   const libxml = await getLibxml();
-  const schema = libxml.XmlDocument.fromString(XSD_TEXT_BY_PATH[root] || "", { url: `${XSD_BASE}${root}`, option: libxml.ParseOption.XML_PARSE_NONET | libxml.ParseOption.XML_PARSE_NO_XXE });
+  const schema = libxml.XmlDocument.fromString(source, { url: `${XSD_BASE}${profile.root}`, option: libxml.ParseOption.XML_PARSE_NONET | libxml.ParseOption.XML_PARSE_NO_XXE });
   let validator: InstanceType<Libxml["XsdValidator"]> | null = null;
   let document: InstanceType<Libxml["XmlDocument"]> | null = null;
   try {
     validator = libxml.XsdValidator.fromDoc(schema);
-    document = libxml.XmlDocument.fromString(payload, { url: "memory:///submitted-invoice.xml", option: libxml.ParseOption.XML_PARSE_NONET | libxml.ParseOption.XML_PARSE_NO_XXE });
+    document = libxml.XmlDocument.fromString(payload, { url: profile.documentUrl || "memory:///submitted-document.xml", option: libxml.ParseOption.XML_PARSE_NONET | libxml.ParseOption.XML_PARSE_NO_XXE });
     validator.validate(document);
     return [];
   } catch (error) {
-    return xsdIssues(error, libxml);
+    return xsdIssues(error, libxml, profile);
   } finally {
     document?.dispose();
     validator?.dispose();
     schema.dispose();
   }
+}
+
+async function validateXsd(payload: string, format: InvoiceFormat): Promise<ValidationIssue[]> {
+  const root = schemaRoots[format];
+  if (!root) return [validationIssue({ code: "XSD-FORMAT-NOT-SUPPORTED", source: "xsd", rule: "DGFiP-FLUX1-XSD", message: `No DGFiP Flux 1 XSD root is configured for ${format}.` })];
+  return validateXsdDocument(payload, { root, rule: "DGFiP-FLUX1-XSD", standard: "DGFiP Flux 1 XSD", standardVersion: "3.2", documentUrl: "memory:///submitted-invoice.xml" });
 }
 
 type SaxonResult = { principalResult?: unknown };

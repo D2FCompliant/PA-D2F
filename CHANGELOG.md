@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.3.0 — 2026-09-23
+
+### Added
+
+- Validate and classify e-reporting Flux 10.1, 10.2, 10.3 and 10.4 with the official DGFiP v3.2 XSD graph.
+- Return traceable Annex 7 v1.9 management-rule failures for transmission metadata, periods, identifiers, currencies, categories and totals.
+- Validate Annuaire Flux 12, 13 and 14 with the official DGFiP v3.2 XSD graph.
+- Persist immutable validation evidence and simulate PPF acceptance/rejection without external network access.
+
+### Compliance
+
+- Report Flux 10 and Annuaire Schematron stages as not applicable because the official DGFiP v3.2 archive does not publish those artefacts; Flux 1 retains real EN 16931/FNFE Schematron execution.
+
+Support: D2F-001064
+
 ## 0.2.7 — 2026-09-23
 
 ### Fixed
