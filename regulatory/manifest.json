@@ -1,0 +1,73 @@
+{
+  "manifestVersion": "1.0.0",
+  "updatedAt": "2026-09-23",
+  "baselines": [
+    {
+      "id": "dgfip.external-specifications",
+      "version": "3.2",
+      "publicationDate": "2026-04-30",
+      "activationDate": "2026-04-30",
+      "source": "https://www.impots.gouv.fr/sites/default/files/media/1_metier/2_professionnel/EV/2_gestion/290_facturation_electronique/specification_externes_b2b/specifications-externes-v3.2.zip",
+      "archiveSha256": "cd8f6e817e37f329e6f62a35aa131b78a51379bec953445b774fa8adbaaa3862",
+      "status": "official-copy-retained"
+    },
+    {
+      "id": "dgfip.ppf-directory-public-api",
+      "version": "1.11.0",
+      "publicationDate": "2026-04-30",
+      "activationDate": "2026-04-30",
+      "source": "DGFiP external specifications v3.2 archive",
+      "artifact": "official/dgfip/v3.2/swagger/ppf-openapi-annuaire-api-public-1.11.0-openapi.json",
+      "artifactSha256": "97d37052e62b80e996925a920b47e8002af532ec814e007835c470cd0d926d9a",
+      "status": "official-copy-retained"
+    },
+    {
+      "id": "fnfe.france-rfe-validation",
+      "version": "1.4.0.04",
+      "publicationDate": "2026-09-04",
+      "activationDate": "2026-09-04",
+      "source": "https://fnfe-mpe.org/wp-content/uploads/2026/09/2026_09_04_FNFE_SCHEMATRONS_FR_CTC_V1.4.0.04.zip",
+      "archiveSha256": "9fddfbbb081ec969374dcefd24615fb1d736fdd974155890fc24a413afd0c01e",
+      "profiles": ["EN16931", "EXTENDED-CTC-FR", "BR-FR-CTC"],
+      "syntaxes": ["UBL", "CII"],
+      "status": "official-copy-retained"
+    },
+    {
+      "id": "afnor.xp-z12-013",
+      "version": "2026-applicable",
+      "publicationDate": null,
+      "activationDate": null,
+      "source": "https://www.boutique.afnor.org/fr-fr/norme/xp-z12013/api-pour-interfacer-les-systemes-dinformations-des-entreprises-avec-les-pla/fa301170/601639",
+      "artifact": null,
+      "artifactSha256": null,
+      "status": "blocked-awaiting-official-openapi",
+      "note": "The DGFiP directory Swagger is not the XP Z12-013 SI-to-PA API. Formal routes must not be inferred."
+    },
+    {
+      "id": "peppol.bis-billing-3",
+      "version": "May-2026",
+      "publicationDate": "2026-05-20",
+      "activationDate": "2026-08-17",
+      "source": "https://docs.peppol.eu/poacc/billing/3.0/",
+      "status": "referenced-downloads-pending"
+    },
+    {
+      "id": "d2f.cbm.v2",
+      "version": "2.1.0",
+      "publicationDate": null,
+      "activationDate": null,
+      "source": "/Users/patricegleizes/Documents/Codex/2026-08-11/re/d2f-platform-src/platform/contracts/models/canonical-business-model.v2.schema.json",
+      "sourceCommit": "0089d08f9f1096ab0d0f3a7dd0563a92aebc0f46",
+      "status": "compatibility-reference"
+    },
+    {
+      "id": "d2f.integration-hub-api",
+      "version": "1.1.0",
+      "publicationDate": null,
+      "activationDate": null,
+      "source": "/Users/patricegleizes/Documents/Codex/2026-08-11/re/d2f-platform-src/platform/contracts/openapi/integration-hub.v1.json",
+      "sourceCommit": "0089d08f9f1096ab0d0f3a7dd0563a92aebc0f46",
+      "status": "compatibility-reference"
+    }
+  ]
+}

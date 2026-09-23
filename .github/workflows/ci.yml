@@ -1,0 +1,38 @@
+name: PA Sandbox CI
+
+on:
+  push:
+    branches: [main, "feature/**", "fix/**"]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pa-sandbox-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Node 22 quality gates
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Use Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Verify generated Cloudflare types
+        run: npm run types:check
+      - name: TypeScript build
+        run: npm run build
+      - name: Automated tests
+        run: npm test
+      - name: Whitespace validation
+        run: git diff --check
