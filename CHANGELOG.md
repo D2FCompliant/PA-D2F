@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.1 — 2026-09-23
+
+### Fixed
+
+- Force the Emscripten `libxml2-wasm` bundle to use its WebAssembly Worker path when Cloudflare Node compatibility exposes a synthetic `process` global.
+- Preserve Node.js 22 behavior for local tests and build tooling while preventing the unsupported runtime `createRequire()` call in the deployed Worker.
+
+Support: D2F-001064
+
 ## 0.2.0 — 2026-09-23
 
 ### Added

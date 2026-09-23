@@ -4,6 +4,9 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-09-23",
   "compatibility_flags": ["nodejs_compat"],
+  "define": {
+    "globalThis.process.type": "\"renderer\""
+  },
   "rules": [
     {
       "type": "Text",
@@ -16,7 +19,7 @@
     "head_sampling_rate": 1
   },
   "vars": {
-    "APP_VERSION": "0.2.0",
+    "APP_VERSION": "0.2.1",
     "ENVIRONMENT": "development",
     "EXTERNAL_NETWORK_DISABLED": "true",
     "API_KEY_HEADER": "x-api-key",
@@ -34,8 +37,11 @@
   "env": {
     "sandbox": {
       "name": "d2f-pa-sandbox",
+      "define": {
+        "globalThis.process.type": "\"renderer\""
+      },
       "vars": {
-        "APP_VERSION": "0.2.0",
+        "APP_VERSION": "0.2.1",
         "ENVIRONMENT": "sandbox",
         "EXTERNAL_NETWORK_DISABLED": "true",
         "API_KEY_HEADER": "x-api-key",
