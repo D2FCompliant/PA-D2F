@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.4 — 2026-09-23
+
+### Fixed
+
+- Import the official embedded libxml2 binary as a Cloudflare `CompiledWasm` module instead of compiling bytecode at request time, which Workers forbids.
+- Preserve the exact libxml2 WebAssembly payload (`SHA-256 148c89deb5f8baeaaf0e50c5f6bbe73b1ea7ff74a462f476cb8b03a5102d8332`).
+
+Support: D2F-001064
+
 ## 0.2.3 — 2026-09-23
 
 ### Fixed

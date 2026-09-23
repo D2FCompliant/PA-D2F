@@ -5,6 +5,14 @@ import en16931Ubl from "./generated/schematron/en16931-ubl.sef.json";
 import brFrUbl from "./generated/schematron/br-fr-ubl.sef.json";
 import type { InvoiceFormat, ValidationIssue } from "./types";
 
+declare global {
+  namespace NodeJS {
+    interface Process {
+      type?: string;
+    }
+  }
+}
+
 export type ValidationStage = {
   id: "xml" | "xsd" | "en16931" | "schematron";
   status: "PASS" | "FAIL" | "NOT_APPLICABLE";
@@ -22,8 +30,29 @@ type Libxml = typeof import("libxml2-wasm");
 let libxmlPromise: Promise<Libxml> | undefined;
 let inputProviderRegistered = false;
 
+async function importLibxml(): Promise<Libxml> {
+  if (globalThis.process?.versions?.node && globalThis.process.type !== "renderer") {
+    return import("libxml2-wasm");
+  }
+  const { default: libxml2Wasm } = await import("./vendor/libxml2.wasm");
+  const wasm = WebAssembly as typeof WebAssembly & { instantiate: typeof WebAssembly.instantiate };
+  const originalInstantiate = wasm.instantiate;
+  wasm.instantiate = ((source: BufferSource | WebAssembly.Module, imports?: WebAssembly.Imports) => {
+    if (!(source instanceof WebAssembly.Module)) {
+      const instance = new WebAssembly.Instance(libxml2Wasm, imports);
+      return Promise.resolve({ instance, module: libxml2Wasm });
+    }
+    return originalInstantiate(source, imports);
+  }) as typeof WebAssembly.instantiate;
+  try {
+    return await import("libxml2-wasm");
+  } finally {
+    wasm.instantiate = originalInstantiate;
+  }
+}
+
 async function getLibxml(): Promise<Libxml> {
-  libxmlPromise ??= import("libxml2-wasm");
+  libxmlPromise ??= importLibxml();
   const libxml = await libxmlPromise;
   if (!inputProviderRegistered) {
     libxml.xmlRegisterInputProvider(new libxml.XmlBufferInputProvider(xsdBuffers));
