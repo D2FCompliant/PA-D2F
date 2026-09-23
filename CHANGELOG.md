@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.7 — 2026-09-23
+
+### Fixed
+
+- Initialize the libxml2 runtime explicitly before loading its synchronous wrappers, removing the unsupported Worker module-level await cycle.
+- Apply the compatibility patch reproducibly during installation and fail safely if the pinned libxml2-wasm 0.7.2 layout changes.
+
+Support: D2F-001064
+
 ## 0.2.6 — 2026-09-23
 
 ### Fixed

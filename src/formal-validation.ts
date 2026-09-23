@@ -6,6 +6,7 @@ import brFrUbl from "./generated/schematron/br-fr-ubl.sef.json";
 import type { InvoiceFormat, ValidationIssue } from "./types";
 
 declare global {
+  var __d2fLibxml2Runtime: unknown;
   namespace NodeJS {
     interface Process {
       type?: string;
@@ -37,9 +38,23 @@ export function emscriptenCallbackModuleKey(source: BufferSource): string {
   return `${bytes.byteLength}:${bytes[13]}`;
 }
 
+async function loadLibxmlModules(): Promise<Libxml> {
+  if (!globalThis.__d2fLibxml2Runtime) {
+    const { default: moduleLoader } = await import("libxml2-wasm/lib/libxml2raw.mjs");
+    globalThis.__d2fLibxml2Runtime = await moduleLoader();
+  }
+  const core = await import("libxml2-wasm/lib/libxml2.mjs");
+  const [document, validators, buffers] = await Promise.all([
+    import("libxml2-wasm/lib/document.mjs"),
+    import("libxml2-wasm/lib/validates.mjs"),
+    import("libxml2-wasm/lib/utils.mjs"),
+  ]);
+  return { ...core, ...document, ...validators, ...buffers } as unknown as Libxml;
+}
+
 async function importLibxml(): Promise<Libxml> {
   if (globalThis.process?.versions?.node && globalThis.process.type !== "renderer") {
-    return import("libxml2-wasm");
+    return loadLibxmlModules();
   }
   const [libxml2Import, callbackViiImport, callbackIiImport, callbackIiiiImport] = await Promise.all([
     import("./vendor/libxml2.wasm"),
@@ -60,7 +75,8 @@ async function importLibxml(): Promise<Libxml> {
   const originalInstantiate = wasm.instantiate;
   const OriginalModule = wasm.Module;
   const WorkerModule = function WorkerModule(source: BufferSource): WebAssembly.Module {
-    const precompiled = callbackModules.get(emscriptenCallbackModuleKey(source));
+    const key = emscriptenCallbackModuleKey(source);
+    const precompiled = callbackModules.get(key);
     if (precompiled) return precompiled;
     return new OriginalModule(source);
   } as unknown as typeof WebAssembly.Module;
@@ -75,7 +91,7 @@ async function importLibxml(): Promise<Libxml> {
     return originalInstantiate(source, imports);
   }) as typeof WebAssembly.instantiate;
   try {
-    return await import("libxml2-wasm");
+    return await loadLibxmlModules();
   } finally {
     wasm.instantiate = originalInstantiate;
   }
