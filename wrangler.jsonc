@@ -5,7 +5,9 @@
   "compatibility_date": "2026-09-23",
   "compatibility_flags": ["nodejs_compat"],
   "define": {
-    "globalThis.process.type": "\"renderer\""
+    "globalThis.process.type": "\"renderer\"",
+    "abstractNode": "globalThis.__saxonAbstractNode",
+    "HostPlatform": "globalThis.__saxonHostPlatform"
   },
   "rules": [
     {
@@ -19,7 +21,7 @@
     "head_sampling_rate": 1
   },
   "vars": {
-    "APP_VERSION": "0.2.2",
+    "APP_VERSION": "0.2.3",
     "ENVIRONMENT": "development",
     "EXTERNAL_NETWORK_DISABLED": "true",
     "API_KEY_HEADER": "x-api-key",
@@ -38,10 +40,12 @@
     "sandbox": {
       "name": "d2f-pa-sandbox",
       "define": {
-        "globalThis.process.type": "\"renderer\""
+        "globalThis.process.type": "\"renderer\"",
+        "abstractNode": "globalThis.__saxonAbstractNode",
+        "HostPlatform": "globalThis.__saxonHostPlatform"
       },
       "vars": {
-        "APP_VERSION": "0.2.2",
+        "APP_VERSION": "0.2.3",
         "ENVIRONMENT": "sandbox",
         "EXTERNAL_NETWORK_DISABLED": "true",
         "API_KEY_HEADER": "x-api-key",

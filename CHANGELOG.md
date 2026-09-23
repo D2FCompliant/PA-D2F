@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.3 — 2026-09-23
+
+### Fixed
+
+- Map SaxonJS Node runtime's two deliberate global bindings to explicit Worker globals during bundling, avoiding strict-module startup errors without altering the official Schematron engine or compiled rules.
+
+Support: D2F-001064
+
 ## 0.2.2 — 2026-09-23
 
 ### Fixed
