@@ -16,7 +16,7 @@
     "head_sampling_rate": 1
   },
   "vars": {
-    "APP_VERSION": "0.1.0",
+    "APP_VERSION": "0.2.0",
     "ENVIRONMENT": "development",
     "EXTERNAL_NETWORK_DISABLED": "true",
     "API_KEY_HEADER": "x-api-key",
@@ -35,7 +35,7 @@
     "sandbox": {
       "name": "d2f-pa-sandbox",
       "vars": {
-        "APP_VERSION": "0.1.0",
+        "APP_VERSION": "0.2.0",
         "ENVIRONMENT": "sandbox",
         "EXTERNAL_NETWORK_DISABLED": "true",
         "API_KEY_HEADER": "x-api-key",

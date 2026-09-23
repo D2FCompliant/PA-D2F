@@ -4,7 +4,7 @@ Independent French e-invoicing and Peppol simulation product for D2F Business Su
 
 > **SANDBOX / TEST ONLY — this application is not an accredited Plateforme Agréée and must never be represented as one.**
 
-## Implemented foundation (0.1.0)
+## Implemented sandbox (0.2.0)
 
 - Independent Cloudflare Worker and D1 schema.
 - External network access disabled by default.
@@ -13,7 +13,10 @@ Independent French e-invoicing and Peppol simulation product for D2F Business Su
 - Lifecycle state machine including French status `212` for collection/payment simulation.
 - Hash-chained test evidence.
 - Permanent sandbox warning in UI and response headers.
-- Structured validation errors without claiming unimplemented formal conformance.
+- The legacy compatibility route remains structural-only and does not overstate its validation scope.
+- `POST /sandbox/v1/validate/flux1` runs the committed DGFiP Flux 1 XSD, EN 16931 rules and FNFE France Schematron, then returns every failed rule with its severity and path.
+- Flux 1 extraction exposes the core business terms used by the simulator, including BT-49, totals and parties.
+- PPF behavior is simulated locally and never calls an external production network or invents a missing BT-49.
 
 The verified gaps and incremental delivery plan are in [docs/GAP-ANALYSIS.md](docs/GAP-ANALYSIS.md).
 

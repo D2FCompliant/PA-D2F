@@ -1,6 +1,8 @@
 import { authenticate } from "./auth";
 import { sha256Hex } from "./crypto";
 import { invoiceEvent } from "./events";
+import { extractFlux1, simulatePpf } from "./flux1";
+import { validateFormalInvoice } from "./formal-validation";
 import { assertTransition, REGULATORY_CODES } from "./lifecycle";
 import { SandboxRepository } from "./repository";
 import type { AuthContext, InvoiceState, StoredInvoice, StoredResponse, ValidationIssue } from "./types";
@@ -46,6 +48,12 @@ export async function route(request: Request, env: Env, _ctx?: ExecutionContext)
     const auth = authenticate(request, env, true);
     if (!auth) return problem(401, "INVALID_AUTH", "Enterprise bearer authentication is required.");
     return submitCanonicalTransaction(request, env, repository, auth);
+  }
+
+  if (url.pathname === "/sandbox/v1/validate/flux1" && request.method === "POST") {
+    const auth = authenticate(request, env, true);
+    if (!auth) return problem(401, "INVALID_AUTH", "Enterprise bearer authentication is required.");
+    return validateFlux1(request, env, repository, auth);
   }
 
   const traceMatch = url.pathname.match(/^\/sandbox\/v1\/traces\/([^/]+)$/);
@@ -116,6 +124,62 @@ async function submitCanonicalTransaction(request: Request, env: Env, repository
   await repository.appendEvent(invoice.id, event);
   const response: StoredResponse = { status: 202, body: { ok: true, transactionId: invoice.id, remote_id: invoice.remoteId, status: "RECEIVED", correlationId: invoice.correlationId, versions: { api: "1.0.0", cbm: env.CBM_VERSION, application: env.APP_VERSION } } };
   await repository.saveIdempotency(auth.connectionId, "canonical.transaction.submit", idempotencyKey, fingerprint, response);
+  return json(response.status, response.body);
+}
+
+async function validateFlux1(request: Request, env: Env, repository: SandboxRepository, auth: AuthContext): Promise<Response> {
+  const idempotencyKey = request.headers.get("idempotency-key")?.trim() || "";
+  if (idempotencyKey.length < 16 || idempotencyKey.length > 200) return problem(400, "INVALID_IDEMPOTENCY_KEY", "Idempotency-Key must contain 16 to 200 characters.");
+  const contentLength = Number(request.headers.get("content-length") || "0");
+  if (contentLength > MAX_BODY_BYTES) return validationProblem(413, [validationIssue("DOCUMENT_TOO_LARGE", "transport", "TRANSPORT-002", `The document exceeds ${MAX_BODY_BYTES} bytes.`)]);
+  const payload = await request.text();
+  const contentType = request.headers.get("content-type") || "application/xml";
+  const format = detectInvoiceFormat(contentType, payload);
+  const initialIssues = [...validateTransport(contentType, payload), ...validateXmlStructure(payload, format)];
+  const fingerprint = await sha256Hex(payload);
+  const replay = await repository.findIdempotency(auth.connectionId, "sandbox.flux1.validate", idempotencyKey);
+  if (replay) {
+    if (replay.fingerprint !== fingerprint) return problem(409, "IDEMPOTENCY_CONFLICT", "The idempotency key was already used with different content.");
+    return json(replay.response.status, { ...replay.response.body, idempotentReplay: true });
+  }
+
+  const formal = initialIssues.some((issue) => issue.severity === "error")
+    ? { stages: [{ id: "xml", status: "FAIL", standard: "XML", version: "1.0", issueCount: initialIssues.length }], issues: [] }
+    : validateFormalInvoice(payload, format);
+  const flux1 = format === "UBL" ? extractFlux1(payload) : { standard: "DGFiP Flux 1", version: "1.2", syntax: format, fields: {}, source: "20260430_Annexe-1-Flux-1-v1.2.xlsx" };
+  const allIssues: ValidationIssue[] = [...initialIssues, ...formal.issues];
+  const ppfSimulation = simulatePpf(flux1 as ReturnType<typeof extractFlux1>, allIssues.some((issue) => issue.severity === "error"));
+  allIssues.push(...ppfSimulation.issues.map((item) => ({ ...item, standard: "PPF simulation", standardVersion: "sandbox" })) as ValidationIssue[]);
+  const accepted = !allIssues.some((issue) => issue.severity === "error") && ppfSimulation.status === "ACCEPTED";
+  const invoice = newInvoice(auth, format, contentType, payload, fingerprint);
+  invoice.currentState = accepted ? "ROUTED" : "REJECTED";
+  await repository.ensureConnection(auth.connectionId, auth.tenantId, auth.legalEntityId);
+  await repository.createInvoice(invoice);
+  const event = invoiceEvent({
+    type: accepted ? "SandboxFlux1Validated" : "SandboxFlux1Rejected",
+    invoiceId: invoice.id,
+    aggregateVersion: 1,
+    auth,
+    appVersion: env.APP_VERSION,
+    correlationId: invoice.correlationId,
+    category: "regulatory",
+    payload: { format, payloadSha256: fingerprint, stages: formal.stages, issues: allIssues, flux1, ppfSimulation },
+  });
+  await repository.appendEvent(invoice.id, event);
+  const result = {
+    status: accepted ? "ACCEPTED" : "REJECTED",
+    accepted,
+    transactionId: invoice.id,
+    remoteId: invoice.remoteId,
+    correlationId: invoice.correlationId,
+    stages: formal.stages,
+    issues: allIssues,
+    flux1,
+    ppfSimulation,
+    versions: { application: env.APP_VERSION, dgfip: env.DGFiP_BASELINE, flux1: "1.2", fnfeSchematron: "1.4.0.04" },
+  };
+  const response: StoredResponse = { status: 200, body: { ok: true, result, environment: "sandbox", testEvidence: true } };
+  await repository.saveIdempotency(auth.connectionId, "sandbox.flux1.validate", idempotencyKey, fingerprint, response);
   return json(response.status, response.body);
 }
 
@@ -199,7 +263,97 @@ function portal(env: Env): string {
 }
 
 function openApi(env: Env): string {
-  return `openapi: 3.1.0\ninfo:\n  title: D2F PA Sandbox API\n  version: ${env.APP_VERSION}\n  description: SANDBOX / TEST ONLY. This service is not an accredited Plateforme Agréée.\npaths:\n  /health:\n    get:\n      security: []\n      responses:\n        '200': { description: Sandbox health and version }\n  /invoices:\n    post:\n      summary: D2F Business Suite raw XML compatibility endpoint\n      parameters:\n        - { name: Idempotency-Key, in: header, required: false, schema: { type: string } }\n      requestBody:\n        required: true\n        content:\n          application/xml: { schema: { type: string } }\n      responses:\n        '202': { description: Submitted to the sandbox engine }\n        '409': { description: Idempotency conflict }\n        '422': { description: Structured validation errors }\n  /invoices/{id}:\n    get:\n      parameters:\n        - { name: id, in: path, required: true, schema: { type: string } }\n      responses:\n        '200': { description: Normalized invoice state }\n  /api/v1/transactions:\n    post:\n      summary: D2F CBM 2.1 canonical transaction submission\n      parameters:\n        - { name: X-D2F-Connection-Id, in: header, required: true, schema: { type: string } }\n        - { name: Idempotency-Key, in: header, required: true, schema: { type: string, minLength: 16, maxLength: 200 } }\n      responses:\n        '202': { description: Canonical transaction accepted }\n  /sandbox/v1/invoices/{id}/lifecycle:\n    post:\n      summary: Sandbox-only lifecycle transition control\n      responses:\n        '202': { description: Transition accepted and evidence recorded }\n        '422': { description: Out-of-order lifecycle transition }\n`;
+  return `openapi: 3.1.0
+info:
+  title: D2F PA Sandbox API
+  version: ${env.APP_VERSION}
+  description: SANDBOX / TEST ONLY. This service is not an accredited Plateforme Agréée.
+components:
+  securitySchemes:
+    enterpriseBearer:
+      type: http
+      scheme: bearer
+  parameters:
+    connectionId:
+      name: X-D2F-Connection-Id
+      in: header
+      required: true
+      schema: { type: string }
+    idempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: { type: string, minLength: 16, maxLength: 200 }
+security:
+  - enterpriseBearer: []
+paths:
+  /health:
+    get:
+      security: []
+      responses:
+        '200': { description: Sandbox health and version }
+  /invoices:
+    post:
+      summary: D2F Business Suite raw XML compatibility endpoint
+      parameters:
+        - { name: Idempotency-Key, in: header, required: false, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/xml: { schema: { type: string } }
+      responses:
+        '202': { description: Submitted to the sandbox engine }
+        '409': { description: Idempotency conflict }
+        '422': { description: Structured validation errors }
+  /invoices/{id}:
+    get:
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: Normalized invoice state }
+        '404': { description: Invoice not found }
+  /api/v1/transactions:
+    post:
+      summary: D2F CBM 2.1 canonical transaction submission
+      parameters:
+        - { $ref: '#/components/parameters/connectionId' }
+        - { $ref: '#/components/parameters/idempotencyKey' }
+      responses:
+        '202': { description: Canonical transaction accepted }
+        '409': { description: Idempotency conflict }
+        '422': { description: Canonical validation errors }
+  /sandbox/v1/validate/flux1:
+    post:
+      summary: Validate an invoice with the official Flux 1 XSD and Schematron rules and simulate PPF submission
+      description: Returns every validation phase, failed rule, extracted Flux 1 business term and the simulated PPF routing result. No external PPF call is made.
+      parameters:
+        - { $ref: '#/components/parameters/connectionId' }
+        - { $ref: '#/components/parameters/idempotencyKey' }
+      requestBody:
+        required: true
+        content:
+          application/xml: { schema: { type: string } }
+      responses:
+        '200': { description: Structured validation and PPF simulation report }
+        '409': { description: Idempotency conflict }
+        '413': { description: Document too large }
+  /sandbox/v1/traces/{id}:
+    get:
+      summary: Retrieve immutable sandbox evidence for one transaction
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: Transaction, events and evidence }
+        '404': { description: Trace not found }
+  /sandbox/v1/invoices/{id}/lifecycle:
+    post:
+      summary: Sandbox-only lifecycle transition control
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '202': { description: Transition accepted and evidence recorded }
+        '422': { description: Out-of-order lifecycle transition }
+`;
 }
 
 function escapeHtml(value: string): string {
