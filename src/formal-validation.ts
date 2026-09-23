@@ -34,9 +34,35 @@ async function importLibxml(): Promise<Libxml> {
   if (globalThis.process?.versions?.node && globalThis.process.type !== "renderer") {
     return import("libxml2-wasm");
   }
-  const { default: libxml2Wasm } = await import("./vendor/libxml2.wasm");
-  const wasm = WebAssembly as typeof WebAssembly & { instantiate: typeof WebAssembly.instantiate };
+  const [libxml2Import, callbackViiImport, callbackIiImport, callbackIiiiImport] = await Promise.all([
+    import("./vendor/libxml2.wasm"),
+    import("./vendor/callback-vii.wasm"),
+    import("./vendor/callback-ii.wasm"),
+    import("./vendor/callback-iiii.wasm"),
+  ]);
+  const libxml2Wasm = libxml2Import.default;
+  const callbackModules = new Map<string, WebAssembly.Module>([
+    ["35:130", callbackViiImport.default],
+    ["35:129", callbackIiImport.default],
+    ["37:131", callbackIiiiImport.default],
+  ]);
+  const wasm = WebAssembly as typeof WebAssembly & {
+    instantiate: typeof WebAssembly.instantiate;
+    Module: typeof WebAssembly.Module;
+  };
   const originalInstantiate = wasm.instantiate;
+  const OriginalModule = wasm.Module;
+  const WorkerModule = function WorkerModule(source: BufferSource): WebAssembly.Module {
+    const bytes = source instanceof ArrayBuffer
+      ? new Uint8Array(source)
+      : new Uint8Array(source.buffer, source.byteOffset, source.byteLength);
+    const precompiled = callbackModules.get(`${bytes.byteLength}:${bytes[14]}`);
+    if (precompiled) return precompiled;
+    return new OriginalModule(source);
+  } as unknown as typeof WebAssembly.Module;
+  Object.setPrototypeOf(WorkerModule, OriginalModule);
+  WorkerModule.prototype = OriginalModule.prototype;
+  wasm.Module = WorkerModule;
   wasm.instantiate = ((source: BufferSource | WebAssembly.Module, imports?: WebAssembly.Imports) => {
     if (!(source instanceof WebAssembly.Module)) {
       const instance = new WebAssembly.Instance(libxml2Wasm, imports);

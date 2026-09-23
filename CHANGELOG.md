@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.5 — 2026-09-23
+
+### Fixed
+
+- Precompile the three libxml2 callback adapters used by Emscripten (`vii`, `ii`, `iiii`) so Cloudflare never needs forbidden runtime WebAssembly code generation.
+
+Support: D2F-001064
+
 ## 0.2.4 — 2026-09-23
 
 ### Fixed
