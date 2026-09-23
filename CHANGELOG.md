@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.4.0 — 2026-09-23
+
+### Added
+
+- Expose a tenant-isolated operations console with the structured Flux 1 metadata, XSD/EN 16931/Schematron stages, rule-level errors and simulated PPF result.
+- Preserve the original validation report while the invoice advances through its sandbox lifecycle.
+- Expose only legal next lifecycle states and record immutable transitions through delivery, availability, approval and French status 212 (`PAID` / encaissée).
+
+### Security
+
+- Operation listings never return invoice XML or credentials and remain scoped by the authenticated tenant.
+
+Support: D2F-001064
+Functional commit: bde392f5876dcf59f77d6bd31986b05ab09d5e20
+
 ## 0.3.0 — 2026-09-23
 
 ### Added
