@@ -22,6 +22,10 @@ export function canTransition(from: InvoiceState, to: InvoiceState): boolean {
   return ALLOWED_TRANSITIONS[from].includes(to);
 }
 
+export function nextInvoiceStates(from: InvoiceState): readonly InvoiceState[] {
+  return ALLOWED_TRANSITIONS[from];
+}
+
 export function assertTransition(from: InvoiceState, to: InvoiceState): void {
   if (!canTransition(from, to)) throw new Error(`OUT_OF_ORDER_LIFECYCLE: ${from} cannot transition to ${to}`);
 }

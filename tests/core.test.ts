@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { validateAnnuaire } from "../src/annuaire";
 import { constantTimeEqual, hmacSha256Hex, sha256Hex } from "../src/crypto";
 import { detectEReportingFlow, validateEReporting } from "../src/e-reporting";
-import { assertTransition, canTransition, REGULATORY_CODES } from "../src/lifecycle";
+import { assertTransition, canTransition, nextInvoiceStates, REGULATORY_CODES } from "../src/lifecycle";
 import { extractFlux1, simulatePpf } from "../src/flux1";
 import { emscriptenCallbackModuleKey, validateFormalInvoice } from "../src/formal-validation";
 import { baselineNotices, detectInvoiceFormat, validateTransport, validateXmlStructure } from "../src/validation";
@@ -89,6 +89,11 @@ describe("lifecycle state machine", () => {
   });
   it("rejects an out-of-order paid status", () => expect(() => assertTransition("RECEIVED", "PAID")).toThrow(/OUT_OF_ORDER_LIFECYCLE/));
   it("maps paid to French lifecycle code 212", () => expect(REGULATORY_CODES.PAID).toBe("212"));
+  it("exposes only the next legal sandbox states", () => {
+    expect(nextInvoiceStates("ROUTED")).toEqual(["DELIVERED"]);
+    expect(nextInvoiceStates("APPROVED")).toEqual(["PROCESSING", "PAID"]);
+    expect(nextInvoiceStates("PAID")).toEqual([]);
+  });
 });
 
 describe("security primitives", () => {

@@ -79,6 +79,23 @@ export async function route(request: Request, env: Env, _ctx?: ExecutionContext)
     return trace ? json(200, { environment: "sandbox", testEvidence: true, ...trace }) : problem(404, "TRACE_NOT_FOUND", "No trace matches this identifier.");
   }
 
+  if (url.pathname === "/sandbox/v1/operations" && request.method === "GET") {
+    const auth = authenticate(request, env, true);
+    if (!auth) return problem(401, "INVALID_AUTH", "Enterprise bearer authentication is required.");
+    const requestedLimit = Number(url.searchParams.get("limit") || "100");
+    const operations = await repository.listOperations(auth.tenantId, Number.isFinite(requestedLimit) ? requestedLimit : 100);
+    return json(200, {
+      ok: true, service: "d2f-pa-sandbox", environment: "sandbox", tenantId: auth.tenantId,
+      count: operations.length,
+      totals: {
+        accepted: operations.filter((item) => ["ROUTED", "DELIVERED", "MADE_AVAILABLE", "APPROVED", "PROCESSING", "PAID"].includes(String(item.status))).length,
+        rejected: operations.filter((item) => item.status === "REJECTED").length,
+        pending: operations.filter((item) => !["ROUTED", "DELIVERED", "MADE_AVAILABLE", "APPROVED", "PROCESSING", "PAID", "REJECTED"].includes(String(item.status))).length,
+      },
+      operations,
+    });
+  }
+
   const lifecycleMatch = url.pathname.match(/^\/sandbox\/v1\/invoices\/([^/]+)\/lifecycle$/);
   if (lifecycleMatch && request.method === "POST") {
     const auth = authenticate(request, env, true);
@@ -463,6 +480,14 @@ paths:
       responses:
         '200': { description: Transaction, events and evidence }
         '404': { description: Trace not found }
+  /sandbox/v1/operations:
+    get:
+      summary: List tenant-isolated inbound PA flows and their latest controls
+      parameters:
+        - { $ref: '#/components/parameters/connectionId' }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 100 } }
+      responses:
+        '200': { description: Sanitized operations without invoice payloads or secrets }
   /sandbox/v1/invoices/{id}/lifecycle:
     post:
       summary: Sandbox-only lifecycle transition control
