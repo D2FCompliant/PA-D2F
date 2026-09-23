@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.6 — 2026-09-23
+
+### Fixed
+
+- Correct the Emscripten callback signature-byte lookup used to select the precompiled Worker adapter modules.
+
+Support: D2F-001064
+
 ## 0.2.5 — 2026-09-23
 
 ### Fixed

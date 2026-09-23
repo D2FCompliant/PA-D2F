@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { constantTimeEqual, hmacSha256Hex, sha256Hex } from "../src/crypto";
 import { assertTransition, canTransition, REGULATORY_CODES } from "../src/lifecycle";
 import { extractFlux1, simulatePpf } from "../src/flux1";
-import { validateFormalInvoice } from "../src/formal-validation";
+import { emscriptenCallbackModuleKey, validateFormalInvoice } from "../src/formal-validation";
 import { baselineNotices, detectInvoiceFormat, validateTransport, validateXmlStructure } from "../src/validation";
 
 const validUbl = `<?xml version="1.0"?><Invoice xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2"><ID>INV-1</ID></Invoice>`;
@@ -26,6 +26,16 @@ describe("formal France validation and Flux 1", () => {
     expect(report.stages.map((stage) => stage.id)).toEqual(["xml", "xsd", "en16931", "schematron"]);
     expect(report.issues.some((issue) => issue.code.endsWith("ENGINE-ERROR"))).toBe(false);
     expect(report.issues.length).toBeGreaterThan(0);
+  });
+
+  it("selects precompiled Worker callback modules from the Emscripten signature byte", () => {
+    const vii = new Uint8Array(35);
+    vii[13] = 130;
+    const ii = new Uint8Array(35);
+    ii[13] = 129;
+    const iiii = new Uint8Array(37);
+    iiii[13] = 131;
+    expect([vii, ii, iiii].map(emscriptenCallbackModuleKey)).toEqual(["35:130", "35:129", "37:131"]);
   });
 
   it("extracts BT-49 for the PPF simulation without inventing it", () => {

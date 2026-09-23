@@ -30,6 +30,13 @@ type Libxml = typeof import("libxml2-wasm");
 let libxmlPromise: Promise<Libxml> | undefined;
 let inputProviderRegistered = false;
 
+export function emscriptenCallbackModuleKey(source: BufferSource): string {
+  const bytes = source instanceof ArrayBuffer
+    ? new Uint8Array(source)
+    : new Uint8Array(source.buffer, source.byteOffset, source.byteLength);
+  return `${bytes.byteLength}:${bytes[13]}`;
+}
+
 async function importLibxml(): Promise<Libxml> {
   if (globalThis.process?.versions?.node && globalThis.process.type !== "renderer") {
     return import("libxml2-wasm");
@@ -53,10 +60,7 @@ async function importLibxml(): Promise<Libxml> {
   const originalInstantiate = wasm.instantiate;
   const OriginalModule = wasm.Module;
   const WorkerModule = function WorkerModule(source: BufferSource): WebAssembly.Module {
-    const bytes = source instanceof ArrayBuffer
-      ? new Uint8Array(source)
-      : new Uint8Array(source.buffer, source.byteOffset, source.byteLength);
-    const precompiled = callbackModules.get(`${bytes.byteLength}:${bytes[14]}`);
+    const precompiled = callbackModules.get(emscriptenCallbackModuleKey(source));
     if (precompiled) return precompiled;
     return new OriginalModule(source);
   } as unknown as typeof WebAssembly.Module;

@@ -26,7 +26,7 @@
     "head_sampling_rate": 1
   },
   "vars": {
-    "APP_VERSION": "0.2.5",
+    "APP_VERSION": "0.2.6",
     "ENVIRONMENT": "development",
     "EXTERNAL_NETWORK_DISABLED": "true",
     "API_KEY_HEADER": "x-api-key",
@@ -50,7 +50,7 @@
         "HostPlatform": "globalThis.__saxonHostPlatform"
       },
       "vars": {
-        "APP_VERSION": "0.2.5",
+        "APP_VERSION": "0.2.6",
         "ENVIRONMENT": "sandbox",
         "EXTERNAL_NETWORK_DISABLED": "true",
         "API_KEY_HEADER": "x-api-key",
