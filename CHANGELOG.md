@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.5.0 — 2026-09-24
+
+### Added
+
+- Publish a fail-closed coverage matrix for Flux 1–14, including conditional Flux 3 and Flux 7 interoperability agreements.
+- Classify canonical invoices and build an explicit SI → D2F PA → receiving PA → recipient dispatch plan with the parallel Flux 1, 6 and 10 obligations.
+- Simulate the receiving PA, PPF/Concentrator and Directory end to end while marking every result as sandbox-only test evidence.
+- Provision and resolve idempotent, tenant-isolated synthetic Directory routes without inventing BT-49.
+- Return exact source, PA or interoperability blockers before any dispatch.
+
+### Compliance
+
+- A sandbox-success verdict is kept distinct from production readiness. Partial or missing official contracts never produce a production-compliant claim.
+
+Support: D2F-001072
+
 ## 0.4.0 — 2026-09-23
 
 ### Added

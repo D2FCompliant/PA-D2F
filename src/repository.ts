@@ -1,4 +1,5 @@
 import { nextInvoiceStates } from "./lifecycle";
+import type { SandboxDirectoryEntry } from "./directory-resolution";
 import type { CanonicalEventEnvelope, InvoiceState, StoredInvoice, StoredResponse } from "./types";
 
 type IdempotencyRecord = { fingerprint: string; response: StoredResponse };
@@ -93,6 +94,37 @@ export class SandboxRepository {
         recordedAt: row.recorded_at ? String(row.recorded_at) : null,
       };
     });
+  }
+
+  async directoryEntries(tenantId: string, siren: string, siret: string): Promise<SandboxDirectoryEntry[]> {
+    const result = await this.db.prepare(`
+      SELECT id, siren, siret, electronic_address, reception_pa, active_from, active_to, metadata
+      FROM directory
+      WHERE tenant_id = ? AND ((? <> '' AND siret = ?) OR (? <> '' AND siren = ?))
+      ORDER BY active_from DESC, id ASC
+      LIMIT 100
+    `).bind(tenantId, siret, siret, siren, siren).all<Record<string, unknown>>();
+    return (result.results ?? []).map((row) => ({
+      id: String(row.id), siren: row.siren ? String(row.siren) : null, siret: row.siret ? String(row.siret) : null,
+      electronicAddress: String(row.electronic_address), receptionPa: row.reception_pa ? String(row.reception_pa) : null,
+      activeFrom: row.active_from ? String(row.active_from) : null, activeTo: row.active_to ? String(row.active_to) : null,
+      metadata: parseObject(row.metadata),
+    }));
+  }
+
+  async upsertDirectoryEntry(tenantId: string, entry: SandboxDirectoryEntry): Promise<void> {
+    await this.db.prepare(`
+      INSERT INTO directory (id, tenant_id, siren, siret, electronic_address, reception_pa, active_from, active_to, metadata)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        siren = excluded.siren,
+        siret = excluded.siret,
+        electronic_address = excluded.electronic_address,
+        reception_pa = excluded.reception_pa,
+        active_from = excluded.active_from,
+        active_to = excluded.active_to,
+        metadata = excluded.metadata
+    `).bind(entry.id, tenantId, entry.siren, entry.siret, entry.electronicAddress, entry.receptionPa, entry.activeFrom, entry.activeTo, JSON.stringify(entry.metadata)).run();
   }
 }
 
