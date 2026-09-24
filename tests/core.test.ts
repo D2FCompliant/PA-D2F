@@ -146,6 +146,7 @@ describe("regulatory flow coverage and CBM preflight", () => {
     expect(plan.reportingFlows).toEqual(["1"]);
     expect(plan.lifecycleFlows).toEqual(["6"]);
     expect(plan.route).toMatchObject({ sender: "SOURCE_SI", senderPa: "D2F_PA_SANDBOX", receiverPa: "PA-RECEIVER" });
+    expect(plan.transport).toMatchObject({ network: "PEPPOL", protocol: "AS4", senderAccessPoint: "D2F_PA_SANDBOX_AP", receiverAccessPoint: "PA-RECEIVER" });
     expect(plan.dispatchable).toBe(false);
     expect(plan.sandboxExecutable).toBe(true);
     expect(plan.productionReady).toBe(false);

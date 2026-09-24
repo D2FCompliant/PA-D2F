@@ -204,15 +204,30 @@ async function resolveDirectory(request: Request, env: Env, repository: SandboxR
   if (siret && !/^\d{14}$/.test(siret)) issues.push(validationIssue("INVALID_SIRET", "routing", "ANNUAIRE-SIRET", "SIRET must contain exactly 14 digits.", "/siret"));
   if (!siren && !siret) issues.push(validationIssue("RECIPIENT_IDENTIFIER_REQUIRED", "routing", "ANNUAIRE-LOOKUP", "A SIREN or SIRET is required for directory resolution.", "/identifiers"));
   if (issues.length) return validationProblem(422, issues);
-  const entries = await repository.directoryEntries(auth.tenantId, siren, siret);
+  let entries = await repository.directoryEntries(auth.tenantId, siren, siret);
+  let syntheticProvisioned = false;
+  if (!entries.length && body.simulateIfMissing === true) {
+    const identifierValue = siret || siren;
+    const synchronizedAt = new Date().toISOString();
+    const digest = await sha256Hex(`${auth.tenantId}:${identifierValue}:${serviceCode || "*"}`);
+    const synthetic = {
+      id: `sbx_dir_${digest.slice(0, 32)}`, siren: siren || siret.slice(0, 9), siret: siret || null,
+      electronicAddress: `SBX-FR-${identifierValue}${serviceCode ? `-${serviceCode}` : ""}`,
+      receptionPa: "SIMULATED_PAR", activeFrom: synchronizedAt.slice(0, 10), activeTo: null,
+      metadata: { electronicAddressScheme: "0225", serviceCode: serviceCode || null, sourceReference: `SANDBOX-SYNTHETIC-${digest.slice(0, 16)}`, directoryVersion: synchronizedAt.slice(0, 10), synchronizedAt, synthetic: true, externalNetworkCalled: false },
+    };
+    await repository.upsertDirectoryEntry(auth.tenantId, synthetic);
+    entries = [synthetic];
+    syntheticProvisioned = true;
+  }
   const result = resolveSandboxDirectory(entries, { siren, siret, serviceCode });
   const correlationId = request.headers.get("x-correlation-id")?.trim() || crypto.randomUUID();
   return json(200, {
     ok: result.status === "RESOLVED",
     result: {
       ...result, country: "FR", regulatoryField: "BT-49", resolvedAt: new Date().toISOString(), correlationId,
-      source: { kind: "PPF_DIRECTORY_SANDBOX_MIRROR", authority: "DGFiP/AIFE specifications", baseline: env.DGFiP_BASELINE, externalNetworkCalled: false },
-      evidence: { testEvidence: true, lookupOrder: ["SIRET", "SIREN"], serviceCodeApplied: Boolean(serviceCode), noAddressInvented: true },
+      source: { kind: syntheticProvisioned ? "SYNTHETIC_PPF_DIRECTORY_SANDBOX" : "PPF_DIRECTORY_SANDBOX_MIRROR", authority: "DGFiP/AIFE specifications", baseline: env.DGFiP_BASELINE, externalNetworkCalled: false },
+      evidence: { testEvidence: true, lookupOrder: ["SIRET", "SIREN"], serviceCodeApplied: Boolean(serviceCode), syntheticProvisioned, noProductionAddressInvented: true },
     },
     environment: "sandbox", testEvidence: true,
   });
@@ -599,7 +614,7 @@ paths:
   /sandbox/v1/directory/resolve:
     post:
       summary: Resolve a French sandbox recipient route from the simulated PPF directory mirror
-      description: Returns BT-49 and source evidence or an explicit NOT_FOUND/AMBIGUOUS result. It never fabricates an address and never calls the production PPF directory.
+      description: Returns BT-49 and source evidence or an explicit NOT_FOUND/AMBIGUOUS result. With simulateIfMissing it may provision a deterministic tenant-only SBX-FR address, clearly marked as synthetic; it never fabricates a production address and never calls the production PPF directory.
       parameters:
         - { $ref: '#/components/parameters/connectionId' }
       requestBody:
@@ -612,6 +627,7 @@ paths:
                 siren: { type: string, pattern: '^[0-9]{9}$' }
                 siret: { type: string, pattern: '^[0-9]{14}$' }
                 serviceCode: { type: string, maxLength: 80 }
+                simulateIfMissing: { type: boolean, default: false, description: Sandbox only; provision a deterministic synthetic route when the mirror has no match }
                 identifiers:
                   type: array
                   items:
