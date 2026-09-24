@@ -2,6 +2,10 @@ import { describe, expect, it } from "vitest";
 import { validateAnnuaire } from "../src/annuaire";
 import { constantTimeEqual, hmacSha256Hex, sha256Hex } from "../src/crypto";
 import { detectEReportingFlow, validateEReporting } from "../src/e-reporting";
+import { resolveSandboxDirectory } from "../src/directory-resolution";
+import { classifyCbmUseCase, preflightCanonicalTransaction } from "../src/cbm-preflight";
+import { REGULATORY_FLOWS, regulatoryCoverage } from "../src/regulatory-coverage";
+import { buildDispatchPlan } from "../src/routing-plan";
 import { assertTransition, canTransition, nextInvoiceStates, REGULATORY_CODES } from "../src/lifecycle";
 import { extractFlux1, simulatePpf } from "../src/flux1";
 import { emscriptenCallbackModuleKey, validateFormalInvoice } from "../src/formal-validation";
@@ -79,6 +83,84 @@ describe("official DGFiP e-reporting and Annuaire controls", () => {
     const result = await validateAnnuaire("<AnnuaireActualisation><BlocCodesRoutage/></AnnuaireActualisation>", "12");
     expect(result.stages.map((stage) => stage.id)).toEqual(["xml", "xsd", "business-rules", "schematron"]);
     expect(result.issues.some((issue) => issue.code.endsWith("ENGINE-ERROR"))).toBe(false);
+  });
+});
+
+describe("PPF directory sandbox resolution", () => {
+  const base = { id: "dir-1", siren: "123456789", siret: "12345678900012", electronicAddress: "FR12345678900012", receptionPa: "PA-D2F-SANDBOX", activeFrom: "2026-01-01", activeTo: null, metadata: { electronicAddressScheme: "0225", sourceReference: "FLUX13-TEST-42", directoryVersion: "2026-09-24", synchronizedAt: "2026-09-24T09:00:00Z" } };
+
+  it("resolves an active SIRET before SIREN and returns source evidence", () => {
+    const result = resolveSandboxDirectory([base], { siren: "123456789", siret: "12345678900012" }, "2026-09-24");
+    expect(result.status).toBe("RESOLVED");
+    expect(result.matchedBy).toBe("SIRET");
+    expect(result.electronicAddress).toEqual({ scheme: "0225", value: "FR12345678900012" });
+    expect(result.sourceReference).toBe("FLUX13-TEST-42");
+  });
+
+  it("never invents an address for an unknown recipient", () => {
+    const result = resolveSandboxDirectory([], { siren: "987654321" }, "2026-09-24");
+    expect(result.status).toBe("NOT_FOUND");
+    expect(result.electronicAddress).toBeNull();
+    expect(result.issues[0]?.code).toBe("D2F_DIRECTORY_NOT_FOUND");
+  });
+
+  it("blocks different active routes instead of selecting one arbitrarily", () => {
+    const result = resolveSandboxDirectory([base, { ...base, id: "dir-2", electronicAddress: "FRDIFFERENT" }], { siren: "123456789" }, "2026-09-24");
+    expect(result.status).toBe("AMBIGUOUS");
+    expect(result.electronicAddress).toBeNull();
+  });
+});
+
+describe("regulatory flow coverage and CBM preflight", () => {
+  const canonical = {
+    type: "INVOICE", externalId: "ERP-42", source: { system: "ORACLE" },
+    seller: { name: "D2F", country: "FR", identifiers: [{ scheme: "SIREN", value: "123456789" }] },
+    buyer: { name: "Client", country: "FR", identifiers: [{ scheme: "SIRET", value: "98765432100012" }] },
+    document: { number: "F-42", issueDate: "2026-09-24", currency: "EUR" }, lines: [{ description: "Service" }],
+  };
+
+  it("declares every reform flow including conditional Flux 7 without claiming unsupported parity", () => {
+    expect(REGULATORY_FLOWS.map((item) => item.flow)).toEqual(expect.arrayContaining(["1", "2", "3", "6", "7", "8", "9", "10.1", "10.2", "10.3", "10.4", "11", "12", "13", "14"]));
+    expect(REGULATORY_FLOWS.find((item) => item.flow === "7")?.status).toBe("BLOCKED_OFFICIAL_ARTIFACT");
+    expect(regulatoryCoverage("0.5.0", "3.2").productionParityClaim).toBe(false);
+  });
+
+  it("classifies domestic B2B and assigns missing BT-49 resolution to the PA", () => {
+    expect(classifyCbmUseCase(canonical)).toBe("FR_DOMESTIC_B2B");
+    const report = preflightCanonicalTransaction(canonical);
+    expect(report.accepted).toBe(true);
+    expect(report.issues.find((item) => item.code === "FR_ROUTING_PA_RESOLUTION_PENDING")?.severity).toBe("information");
+    expect(report.nextActions.find((item) => item.code === "FR_ROUTING_PA_RESOLUTION_PENDING")?.owner).toBe("PA");
+  });
+
+  it("returns exact source-owned omissions", () => {
+    const report = preflightCanonicalTransaction({ type: "INVOICE" });
+    expect(report.accepted).toBe(false);
+    expect(report.issues.map((item) => item.code)).toContain("CBM_SOURCE_SYSTEM_REQUIRED");
+    expect(report.issues.map((item) => item.code)).toContain("CBM_LINE_REQUIRED");
+  });
+
+  it("selects Flux 2 for a domestic UBL and keeps dispatch blocked until PA interop is proven", () => {
+    const plan = buildDispatchPlan({ ...canonical, document: { ...canonical.document, syntax: "UBL" }, routing: { electronicAddress: { scheme: "0225", value: "FR98765432100012" }, receiverPa: "PA-RECEIVER" } }, "FR_DOMESTIC_B2B");
+    expect(plan.invoiceFlow).toBe("2");
+    expect(plan.reportingFlows).toEqual(["1"]);
+    expect(plan.lifecycleFlows).toEqual(["6"]);
+    expect(plan.route).toMatchObject({ sender: "SOURCE_SI", senderPa: "D2F_PA_SANDBOX", receiverPa: "PA-RECEIVER" });
+    expect(plan.transport).toMatchObject({ network: "PEPPOL", protocol: "AS4", senderAccessPoint: "D2F_PA_SANDBOX_AP", receiverAccessPoint: "PA-RECEIVER" });
+    expect(plan.dispatchable).toBe(false);
+    expect(plan.sandboxExecutable).toBe(true);
+    expect(plan.productionReady).toBe(false);
+    expect(plan.sandboxSimulation).toEqual({ receiverPa: true, ppf: true, directory: true, externalNetworkCalled: false });
+    expect(plan.blockers.map((item) => item.code)).toContain("FLOW_2_NOT_OPERATIONAL");
+  });
+
+  it("never selects Flux 3 without a bilateral versioned profile", () => {
+    const blocked = buildDispatchPlan({ ...canonical, document: { ...canonical.document, syntax: "EDIFACT" } }, "FR_DOMESTIC_B2B");
+    expect(blocked.invoiceFlow).toBe("3");
+    expect(blocked.blockers.map((item) => item.code)).toContain("FLUX3_BILATERAL_PROFILE_REQUIRED");
+    const agreed = buildDispatchPlan({ ...canonical, document: { ...canonical.document, syntax: "EDIFACT" }, routing: { customProfile: { bilateralAgreement: true, profileId: "GALIA-INVOIC", profileVersion: "D96A" } } }, "FR_DOMESTIC_B2B");
+    expect(agreed.blockers.map((item) => item.code)).not.toContain("FLUX3_BILATERAL_PROFILE_REQUIRED");
+    expect(agreed.blockers.map((item) => item.code)).toContain("FLOW_3_NOT_OPERATIONAL");
   });
 });
 
