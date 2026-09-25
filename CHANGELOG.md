@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.5.1 — 2026-09-25
+
+### Added
+
+- Accept canonical `D2F_REGULATORY_BATCH_V1` source batches from Enterprise Platform.
+- Generate and validate PA-owned Flux 10.1, 10.2, 10.3 and 10.4 documents.
+- Aggregate B2C transactions, preserve source-record links and return generated-document fingerprints.
+- Preserve idempotent validation evidence without claiming an external PPF delivery.
+
+### Tests
+
+- B2C source invoices aggregate into a valid Flux 10.3.
+- Collected payments generate valid Flux 10.2 and 10.4 documents, including invoices from an earlier period.
+
+Support: D2F-REL-36205
+Functional commit: db90df34d4c49d5899fa880041ce2569667b20d0
+
 ## 0.5.0 — 2026-09-25
 
 ### Fixed
