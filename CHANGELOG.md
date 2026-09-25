@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.5.0 — 2026-09-25
+
+### Fixed
+
+- Validate incoming Flux 2 UBL invoices with the official OASIS UBL 2.1 runtime schema instead of the structurally different DGFiP Flux 1 schema.
+- Keep Flux 1 validation and generation separate from the incoming invoice validation pipeline.
+- Ignore macOS AppleDouble metadata when producing the immutable runtime XSD bundles.
+
+### Tests
+
+- A complete French invoice must pass OASIS UBL 2.1, EN 16931 and FNFE controls end to end.
+
+Support: D2F-REL-36000
+Functional commit: d4fc65f
+
 ## 0.4.0 — 2026-09-23
 
 ### Added
