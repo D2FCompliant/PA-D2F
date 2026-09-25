@@ -2,6 +2,7 @@ import { XMLParser } from "fast-xml-parser";
 import SaxonJS from "saxon-js";
 import { XSD_TEXT_BY_PATH } from "./generated/xsd-bundle";
 import { EXTERNAL_XSD_TEXT_BY_PATH } from "./generated/external-xsd-bundle";
+import { OASIS_UBL_XSD_TEXT_BY_PATH } from "./generated/oasis-ubl-xsd-bundle";
 import en16931Ubl from "./generated/schematron/en16931-ubl.sef.json";
 import brFrUbl from "./generated/schematron/br-fr-ubl.sef.json";
 import type { InvoiceFormat, ValidationIssue } from "./types";
@@ -26,7 +27,7 @@ export type ValidationStage = {
 const XSD_BASE = "memory:///";
 const encoder = new TextEncoder();
 const xsdBuffers = Object.fromEntries(
-  Object.entries({ ...XSD_TEXT_BY_PATH, ...EXTERNAL_XSD_TEXT_BY_PATH }).map(([path, source]) => [`${XSD_BASE}${path}`, encoder.encode(source)]),
+  Object.entries({ ...XSD_TEXT_BY_PATH, ...EXTERNAL_XSD_TEXT_BY_PATH, ...OASIS_UBL_XSD_TEXT_BY_PATH }).map(([path, source]) => [`${XSD_BASE}${path}`, encoder.encode(source)]),
 );
 type Libxml = typeof import("libxml2-wasm");
 let libxmlPromise: Promise<Libxml> | undefined;
@@ -109,7 +110,7 @@ async function getLibxml(): Promise<Libxml> {
 }
 
 const schemaRoots: Partial<Record<InvoiceFormat, string>> = {
-  UBL: "F1_BASE_UBL_2.1/F1BASE_UBL-invoice-2.1.xsd",
+  UBL: "oasis-ubl-2.1/maindoc/UBL-Invoice-2.1.xsd",
   CII: "F1_BASE_CII_D22B/uncefact/data/standard/F1BASE_CrossIndustryInvoice_100pD22B.xsd",
 };
 
@@ -150,7 +151,7 @@ function xsdIssues(error: unknown, libxml: Libxml, profile: XsdValidationProfile
 }
 
 export async function validateXsdDocument(payload: string, profile: XsdValidationProfile): Promise<ValidationIssue[]> {
-  const source = XSD_TEXT_BY_PATH[profile.root] || EXTERNAL_XSD_TEXT_BY_PATH[profile.root];
+  const source = XSD_TEXT_BY_PATH[profile.root] || EXTERNAL_XSD_TEXT_BY_PATH[profile.root] || OASIS_UBL_XSD_TEXT_BY_PATH[profile.root];
   if (!source) return [validationIssue({ code: "XSD-SCHEMA-NOT-FOUND", source: "xsd", rule: profile.rule, message: `The configured schema ${profile.root} is not bundled.`, standard: profile.standard, standardVersion: profile.standardVersion })];
   const libxml = await getLibxml();
   const schema = libxml.XmlDocument.fromString(source, { url: `${XSD_BASE}${profile.root}`, option: libxml.ParseOption.XML_PARSE_NONET | libxml.ParseOption.XML_PARSE_NO_XXE });
@@ -172,8 +173,15 @@ export async function validateXsdDocument(payload: string, profile: XsdValidatio
 
 async function validateXsd(payload: string, format: InvoiceFormat): Promise<ValidationIssue[]> {
   const root = schemaRoots[format];
-  if (!root) return [validationIssue({ code: "XSD-FORMAT-NOT-SUPPORTED", source: "xsd", rule: "DGFiP-FLUX1-XSD", message: `No DGFiP Flux 1 XSD root is configured for ${format}.` })];
-  return validateXsdDocument(payload, { root, rule: "DGFiP-FLUX1-XSD", standard: "DGFiP Flux 1 XSD", standardVersion: "3.2", documentUrl: "memory:///submitted-invoice.xml" });
+  if (!root) return [validationIssue({ code: "XSD-FORMAT-NOT-SUPPORTED", source: "xsd", rule: "FLUX2-XSD", message: `No Flux 2 structural XSD root is configured for ${format}.` })];
+  const ubl = format === "UBL";
+  return validateXsdDocument(payload, {
+    root,
+    rule: ubl ? "OASIS-UBL-2.1-XSD" : "DGFiP-FLUX2-CII-XSD",
+    standard: ubl ? "OASIS UBL" : "DGFiP CII",
+    standardVersion: ubl ? "2.1" : "3.2",
+    documentUrl: "memory:///submitted-invoice.xml",
+  });
 }
 
 type SaxonResult = { principalResult?: unknown };
@@ -236,7 +244,7 @@ function runSchematron(payload: string, stylesheetInternal: unknown, source: "en
 export async function validateFormalInvoice(payload: string, format: InvoiceFormat): Promise<{ stages: ValidationStage[]; issues: ValidationIssue[] }> {
   const xsd = await validateXsd(payload, format);
   const stages: ValidationStage[] = [{ id: "xml", status: "PASS", standard: "XML", version: "1.0", issueCount: 0 }];
-  stages.push({ id: "xsd", status: xsd.some((item) => item.severity === "error") ? "FAIL" : "PASS", standard: "DGFiP Flux 1 XSD", version: "3.2", issueCount: xsd.length });
+  stages.push({ id: "xsd", status: xsd.some((item) => item.severity === "error") ? "FAIL" : "PASS", standard: format === "UBL" ? "OASIS UBL" : "DGFiP CII", version: format === "UBL" ? "2.1" : "3.2", issueCount: xsd.length });
   if (format !== "UBL") {
     stages.push({ id: "en16931", status: "NOT_APPLICABLE", standard: "EN 16931", version: "2017", issueCount: 0 });
     stages.push({ id: "schematron", status: "NOT_APPLICABLE", standard: "FNFE France Schematron", version: "1.4.0.04", issueCount: 0 });

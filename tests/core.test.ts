@@ -22,12 +22,28 @@ describe("document detection and transport validation", () => {
 
 describe("formal France validation and Flux 1", () => {
   const routedUbl = `<?xml version="1.0"?><Invoice xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2" xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2" xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2"><cbc:ID>INV-1</cbc:ID><cbc:IssueDate>2026-09-23</cbc:IssueDate><cbc:InvoiceTypeCode>380</cbc:InvoiceTypeCode><cbc:DocumentCurrencyCode>EUR</cbc:DocumentCurrencyCode><cac:AccountingCustomerParty><cac:Party><cbc:EndpointID schemeID="0225">FR123456789</cbc:EndpointID><cac:PartyLegalEntity><cbc:RegistrationName>Buyer</cbc:RegistrationName></cac:PartyLegalEntity></cac:Party></cac:AccountingCustomerParty></Invoice>`;
+  const compliantFranceUbl = `<?xml version="1.0" encoding="UTF-8"?>
+<Invoice xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2" xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2" xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2">
+<cbc:CustomizationID>urn:cen.eu:en16931:2017</cbc:CustomizationID><cbc:ProfileID>B1</cbc:ProfileID><cbc:ID>F2026-TEST</cbc:ID><cbc:IssueDate>2026-09-25</cbc:IssueDate><cbc:DueDate>2026-10-25</cbc:DueDate><cbc:InvoiceTypeCode>380</cbc:InvoiceTypeCode>
+<cbc:Note>#PMT#Indemnité forfaitaire pour frais de recouvrement : 40 EUR.</cbc:Note><cbc:Note>#PMD#Pénalités de retard exigibles au taux légal en vigueur.</cbc:Note><cbc:Note>#AAB#Aucun escompte pour paiement anticipé.</cbc:Note><cbc:DocumentCurrencyCode>EUR</cbc:DocumentCurrencyCode>
+<cac:AccountingSupplierParty><cac:Party><cbc:EndpointID schemeID="0225">987654321</cbc:EndpointID><cac:PartyIdentification><cbc:ID schemeID="0002">987654321</cbc:ID></cac:PartyIdentification><cac:PartyIdentification><cbc:ID schemeID="0009">98765432100019</cbc:ID></cac:PartyIdentification><cac:PostalAddress><cbc:StreetName>1 rue D2F</cbc:StreetName><cbc:CityName>Paris</cbc:CityName><cbc:PostalZone>75001</cbc:PostalZone><cac:Country><cbc:IdentificationCode>FR</cbc:IdentificationCode></cac:Country></cac:PostalAddress><cac:PartyTaxScheme><cbc:CompanyID>FR00123456789</cbc:CompanyID><cac:TaxScheme><cbc:ID>VAT</cbc:ID></cac:TaxScheme></cac:PartyTaxScheme><cac:PartyLegalEntity><cbc:RegistrationName>D2F Seller</cbc:RegistrationName><cbc:CompanyID schemeID="0002">987654321</cbc:CompanyID></cac:PartyLegalEntity></cac:Party></cac:AccountingSupplierParty>
+<cac:AccountingCustomerParty><cac:Party><cbc:EndpointID schemeID="0225">123456789</cbc:EndpointID><cac:PartyIdentification><cbc:ID schemeID="0002">123456789</cbc:ID></cac:PartyIdentification><cac:PostalAddress><cbc:StreetName>2 rue Client</cbc:StreetName><cbc:CityName>Paris</cbc:CityName><cbc:PostalZone>75002</cbc:PostalZone><cac:Country><cbc:IdentificationCode>FR</cbc:IdentificationCode></cac:Country></cac:PostalAddress><cac:PartyLegalEntity><cbc:RegistrationName>Client</cbc:RegistrationName><cbc:CompanyID schemeID="0002">123456789</cbc:CompanyID></cac:PartyLegalEntity></cac:Party></cac:AccountingCustomerParty>
+<cac:PaymentMeans><cbc:PaymentMeansCode>30</cbc:PaymentMeansCode><cac:PayeeFinancialAccount><cbc:ID>FR1420041010050500013M02606</cbc:ID></cac:PayeeFinancialAccount></cac:PaymentMeans><cac:PaymentTerms><cbc:Note>30 jours</cbc:Note></cac:PaymentTerms>
+<cac:TaxTotal><cbc:TaxAmount currencyID="EUR">20.00</cbc:TaxAmount><cac:TaxSubtotal><cbc:TaxableAmount currencyID="EUR">100.00</cbc:TaxableAmount><cbc:TaxAmount currencyID="EUR">20.00</cbc:TaxAmount><cac:TaxCategory><cbc:ID>S</cbc:ID><cbc:Percent>20.00</cbc:Percent><cac:TaxScheme><cbc:ID>VAT</cbc:ID></cac:TaxScheme></cac:TaxCategory></cac:TaxSubtotal></cac:TaxTotal>
+<cac:LegalMonetaryTotal><cbc:LineExtensionAmount currencyID="EUR">100.00</cbc:LineExtensionAmount><cbc:TaxExclusiveAmount currencyID="EUR">100.00</cbc:TaxExclusiveAmount><cbc:TaxInclusiveAmount currencyID="EUR">120.00</cbc:TaxInclusiveAmount><cbc:PayableAmount currencyID="EUR">120.00</cbc:PayableAmount></cac:LegalMonetaryTotal>
+<cac:InvoiceLine><cbc:ID>1</cbc:ID><cbc:InvoicedQuantity unitCode="C62">1</cbc:InvoicedQuantity><cbc:LineExtensionAmount currencyID="EUR">100.00</cbc:LineExtensionAmount><cac:Item><cbc:Name>Service</cbc:Name><cac:ClassifiedTaxCategory><cbc:ID>S</cbc:ID><cbc:Percent>20.00</cbc:Percent><cac:TaxScheme><cbc:ID>VAT</cbc:ID></cac:TaxScheme></cac:ClassifiedTaxCategory></cac:Item><cac:Price><cbc:PriceAmount currencyID="EUR">100.00</cbc:PriceAmount></cac:Price></cac:InvoiceLine></Invoice>`;
 
   it("executes the official DGFiP XSD and both Schematron stages", async () => {
     const report = await validateFormalInvoice(routedUbl, "UBL");
     expect(report.stages.map((stage) => stage.id)).toEqual(["xml", "xsd", "en16931", "schematron"]);
     expect(report.issues.some((issue) => issue.code.endsWith("ENGINE-ERROR"))).toBe(false);
     expect(report.issues.length).toBeGreaterThan(0);
+  });
+
+  it("accepts a complete France Flux 2 against OASIS UBL, EN 16931 and FNFE controls", async () => {
+    const report = await validateFormalInvoice(compliantFranceUbl, "UBL");
+    expect(report.stages.every((stage) => stage.status === "PASS")).toBe(true);
+    expect(report.issues.filter((issue) => issue.severity === "error")).toEqual([]);
   });
 
   it("selects precompiled Worker callback modules from the Emscripten signature byte", () => {
