@@ -176,6 +176,14 @@ describe("lifecycle state machine", () => {
   });
   it("rejects an out-of-order paid status", () => expect(() => assertTransition("RECEIVED", "PAID")).toThrow(/OUT_OF_ORDER_LIFECYCLE/));
   it("maps paid to French lifecycle code 212", () => expect(REGULATORY_CODES.PAID).toBe("212"));
+  it("maps supplier delivery and buyer decisions to French lifecycle codes", () => {
+    expect(REGULATORY_CODES.DELIVERED).toBe("202");
+    expect(REGULATORY_CODES.MADE_AVAILABLE).toBe("203");
+    expect(REGULATORY_CODES.APPROVED).toBe("205");
+    expect(REGULATORY_CODES.DISPUTED).toBe("207");
+    expect(REGULATORY_CODES.SUSPENDED).toBe("208");
+    expect(REGULATORY_CODES.REFUSED).toBe("210");
+  });
   it("exposes only the next legal sandbox states", () => {
     expect(nextInvoiceStates("ROUTED")).toEqual(["DELIVERED"]);
     expect(nextInvoiceStates("APPROVED")).toEqual(["PROCESSING", "PAID"]);

@@ -15,6 +15,12 @@ const ALLOWED_TRANSITIONS: Record<InvoiceState, readonly InvoiceState[]> = {
 };
 
 export const REGULATORY_CODES: Partial<Record<InvoiceState, string>> = {
+  DELIVERED: "202",
+  MADE_AVAILABLE: "203",
+  APPROVED: "205",
+  DISPUTED: "207",
+  SUSPENDED: "208",
+  REFUSED: "210",
   PAID: "212"
 };
 
