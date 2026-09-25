@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { validateAnnuaire } from "../src/annuaire";
 import { constantTimeEqual, hmacSha256Hex, sha256Hex } from "../src/crypto";
 import { detectEReportingFlow, validateEReporting } from "../src/e-reporting";
+import { generateEReportingDocuments } from "../src/e-reporting-ingest";
 import { assertTransition, canTransition, nextInvoiceStates, REGULATORY_CODES } from "../src/lifecycle";
 import { extractFlux1, simulatePpf } from "../src/flux1";
 import { emscriptenCallbackModuleKey, validateFormalInvoice } from "../src/formal-validation";
@@ -82,6 +83,75 @@ describe("official DGFiP e-reporting and Annuaire controls", () => {
     expect(detectEReportingFlow({ PaymentsReport: { Invoice: {} } })).toBe("10.2");
     expect(detectEReportingFlow({ TransactionsReport: { Transactions: {} } })).toBe("10.3");
     expect(detectEReportingFlow({ PaymentsReport: { Transactions: {} } })).toBe("10.4");
+  });
+
+  it("keeps canonical source ingestion at the PA boundary and aggregates B2C records into Flux 10.3", async () => {
+    const canonical = {
+      type: "DOCUMENT",
+      externalId: "FR-REPORT-20260910",
+      document: {
+        kind: "REGULATORY_REPORTING_BATCH",
+        number: "FR-REPORT-20260910",
+        payload: {
+          schema: "D2F_REGULATORY_BATCH_V1",
+          profile: "FR_PA",
+          company: { legal_name: "D2F Test", siren: "123456789" },
+          period: { start: "2026-09-01", end: "2026-09-10" },
+          obligations: [{ id: "fr_b2c_transactions_10_3", candidate_ids: ["inv-1", "inv-2"] }],
+          records: {
+            invoices: [
+              { id: "inv-1", number: "F1", date: "2026-09-09", customer_type: "B2C", customer_country: "FR", currency: "EUR", operation_category: "goods", total_ht: 100, total_tva: 20, total_ttc: 120, tax_breakdown: [{ rate: 20, taxable_amount: 100, tax_amount: 20 }] },
+              { id: "inv-2", number: "F2", date: "2026-09-09", customer_type: "B2C", customer_country: "FR", currency: "EUR", operation_category: "goods", total_ht: 50, total_tva: 10, total_ttc: 60, tax_breakdown: [{ rate: 20, taxable_amount: 50, tax_amount: 10 }] },
+            ],
+            payments: [],
+          },
+        },
+      },
+    };
+    const documents = generateEReportingDocuments(canonical);
+    expect(documents).toHaveLength(1);
+    expect(documents[0]?.flow).toBe("10.3");
+    expect(documents[0]?.xml).toContain("<TransactionsCount>2</TransactionsCount>");
+    expect(documents[0]?.xml).toContain("<TaxExclusiveAmount>150.00</TaxExclusiveAmount>");
+    const validation = await validateEReporting(documents[0]!.xml, new Date("2026-09-26T12:00:00Z"));
+    expect(validation.issues.filter((issue) => issue.severity === "error")).toEqual([]);
+  });
+
+  it("generates PA-owned Flux 10.2 and 10.4 from collected-payment source records", async () => {
+    const canonical = {
+      type: "DOCUMENT",
+      externalId: "FR-PAY-20260910",
+      document: {
+        kind: "REGULATORY_REPORTING_BATCH",
+        number: "FR-PAY-20260910",
+        payload: {
+          schema: "D2F_REGULATORY_BATCH_V1",
+          profile: "FR_PA",
+          company: { legal_name: "D2F Test", siren: "123456789" },
+          period: { start: "2026-09-01", end: "2026-09-10" },
+          obligations: [
+            { id: "fr_payment_data_10_2", candidate_ids: ["pay-b2bi"] },
+            { id: "fr_b2c_payments_10_4", candidate_ids: ["pay-b2c"] },
+          ],
+          records: {
+            invoices: [
+              { id: "inv-b2bi", number: "FI-1", date: "2026-08-20", total_ht: 100, total_tva: 20, total_ttc: 120, tax_breakdown: [{ rate: 20, taxable_amount: 100, tax_amount: 20 }] },
+              { id: "inv-b2c", number: "FC-1", date: "2026-08-21", total_ht: 50, total_tva: 10, total_ttc: 60, tax_breakdown: [{ rate: 20, taxable_amount: 50, tax_amount: 10 }] },
+            ],
+            payments: [
+              { id: "pay-b2bi", invoice_id: "inv-b2bi", date: "2026-09-05", amount: 120 },
+              { id: "pay-b2c", invoice_id: "inv-b2c", date: "2026-09-06", amount: 60 },
+            ],
+          },
+        },
+      },
+    };
+    const documents = generateEReportingDocuments(canonical);
+    expect(documents.map((item) => item.flow)).toEqual(["10.2", "10.4"]);
+    for (const document of documents) {
+      const validation = await validateEReporting(document.xml, new Date("2026-09-26T12:00:00Z"));
+      expect(validation.issues.filter((issue) => issue.severity === "error"), document.flow).toEqual([]);
+    }
   });
 
   it("rejects a mixed transaction and payment transmission under G6.29", async () => {

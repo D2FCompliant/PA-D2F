@@ -2,6 +2,7 @@ import { authenticate } from "./auth";
 import { validateAnnuaire, type AnnuaireFlow } from "./annuaire";
 import { sha256Hex } from "./crypto";
 import { validateEReporting } from "./e-reporting";
+import { generateEReportingDocuments } from "./e-reporting-ingest";
 import { invoiceEvent } from "./events";
 import { extractFlux1, simulatePpf } from "./flux1";
 import { validateFormalInvoice } from "./formal-validation";
@@ -62,6 +63,12 @@ export async function route(request: Request, env: Env, _ctx?: ExecutionContext)
     const auth = authenticate(request, env, true);
     if (!auth) return problem(401, "INVALID_AUTH", "Enterprise bearer authentication is required.");
     return validateEReportingSubmission(request, env, repository, auth);
+  }
+
+  if (url.pathname === "/sandbox/v1/ingest/ereporting" && request.method === "POST") {
+    const auth = authenticate(request, env, true);
+    if (!auth) return problem(401, "INVALID_AUTH", "Enterprise bearer authentication is required.");
+    return ingestEReportingSubmission(request, env, repository, auth);
   }
 
   const annuaireValidationMatch = url.pathname.match(/^\/sandbox\/v1\/validate\/annuaire\/(12|13|14)$/);
@@ -239,6 +246,78 @@ async function validateEReportingSubmission(request: Request, env: Env, reposito
   const result = { status: accepted ? "ACCEPTED" : "REJECTED", accepted, transactionId: invoice.id, remoteId: invoice.remoteId, correlationId: invoice.correlationId, ...validation, ppfSimulation, versions: { application: env.APP_VERSION, dgfip: env.DGFiP_BASELINE, annex6: "1.10", annex7: "1.9" } };
   const response: StoredResponse = { status: 200, body: { ok: true, result, environment: "sandbox", testEvidence: true } };
   await repository.saveIdempotency(auth.connectionId, "sandbox.ereporting.validate", input.idempotencyKey, input.fingerprint, response);
+  return json(response.status, response.body);
+}
+
+async function ingestEReportingSubmission(request: Request, env: Env, repository: SandboxRepository, auth: AuthContext): Promise<Response> {
+  const operation = "sandbox.ereporting.ingest";
+  const idempotencyKey = request.headers.get("idempotency-key")?.trim() || "";
+  if (idempotencyKey.length < 16 || idempotencyKey.length > 200) return problem(400, "INVALID_IDEMPOTENCY_KEY", "Idempotency-Key must contain 16 to 200 characters.");
+  const contentType = request.headers.get("content-type") || "";
+  if (!contentType.toLowerCase().includes("application/json")) return problem(415, "UNSUPPORTED_MEDIA_TYPE", "Canonical e-reporting ingestion requires application/json.");
+  const contentLength = Number(request.headers.get("content-length") || "0");
+  if (contentLength > MAX_BODY_BYTES) return problem(413, "DOCUMENT_TOO_LARGE", `The document exceeds ${MAX_BODY_BYTES} bytes.`);
+  const rawPayload = await request.text();
+  const fingerprint = await sha256Hex(rawPayload);
+  const replay = await repository.findIdempotency(auth.connectionId, operation, idempotencyKey);
+  if (replay) {
+    if (replay.fingerprint !== fingerprint) return problem(409, "IDEMPOTENCY_CONFLICT", "The idempotency key was already used with different content.");
+    return json(replay.response.status, { ...replay.response.body, idempotentReplay: true });
+  }
+  let canonical: Record<string, unknown>;
+  try {
+    canonical = object(JSON.parse(rawPayload));
+  } catch {
+    return problem(400, "INVALID_JSON", "The canonical e-reporting batch must be valid JSON.");
+  }
+  let documents;
+  try {
+    documents = generateEReportingDocuments(canonical);
+  } catch (error) {
+    return problem(422, "E_REPORTING_SOURCE_REJECTED", error instanceof Error ? error.message : "The canonical e-reporting source could not be aggregated.");
+  }
+  const validations = await Promise.all(documents.map(async (document) => ({ document, payloadSha256: await sha256Hex(document.xml), validation: await validateEReporting(document.xml) })));
+  const accepted = validations.every(({ validation }) => !validation.issues.some((issue) => issue.severity === "error"));
+  const invoice = newInvoice(auth, "UNKNOWN", "application/json", rawPayload, fingerprint);
+  invoice.currentState = accepted ? "ROUTED" : "REJECTED";
+  await repository.ensureConnection(auth.connectionId, auth.tenantId, auth.legalEntityId);
+  await repository.createInvoice(invoice);
+  const results = validations.map(({ document, payloadSha256, validation }) => ({
+    ...validation,
+    flow: document.flow,
+    format: "DGFiP_FLUX_10",
+    recordIds: document.recordIds,
+    payloadSha256,
+    accepted: !validation.issues.some((issue) => issue.severity === "error"),
+  }));
+  const ppfSimulation = { status: accepted ? "ACCEPTED" : "REJECTED", externalNetworkCalled: false, target: "PPF sandbox simulation", flows: results.map((item) => ({ flow: item.flow, status: item.accepted ? "ACCEPTED" : "REJECTED" })) };
+  const event = invoiceEvent({
+    type: accepted ? "SandboxEReportingBatchAggregated" : "SandboxEReportingBatchRejected",
+    invoiceId: invoice.id,
+    aggregateVersion: 1,
+    auth,
+    appVersion: env.APP_VERSION,
+    correlationId: invoice.correlationId,
+    category: "regulatory",
+    payload: { payloadSha256: fingerprint, sourceSchema: "D2F_REGULATORY_BATCH_V1", generatedBy: "D2F PA Sandbox", results, ppfSimulation },
+  });
+  await repository.appendEvent(invoice.id, event);
+  const issues = results.flatMap((item) => item.issues.map((issue) => ({ ...issue, source: issue.source, flow: item.flow })));
+  const stages = results.flatMap((item) => item.stages.map((stage) => ({ ...stage, flow: item.flow })));
+  const result = {
+    status: accepted ? "ACCEPTED" : "REJECTED",
+    accepted,
+    transactionId: invoice.id,
+    remoteId: invoice.remoteId,
+    correlationId: invoice.correlationId,
+    issues,
+    stages,
+    generatedDocuments: results,
+    ppfSimulation,
+    versions: { application: env.APP_VERSION, dgfip: env.DGFiP_BASELINE, annex6: "1.10", annex7: "1.9" },
+  };
+  const response: StoredResponse = { status: 200, body: { ok: true, result, environment: "sandbox", testEvidence: true } };
+  await repository.saveIdempotency(auth.connectionId, operation, idempotencyKey, fingerprint, response);
   return json(response.status, response.body);
 }
 
@@ -457,6 +536,21 @@ paths:
         '200': { description: Structured Flux 10 validation and simulated PPF result }
         '409': { description: Idempotency conflict }
         '413': { description: Document too large }
+  /sandbox/v1/ingest/ereporting:
+    post:
+      summary: Ingest canonical source records and let the PA aggregate, generate and validate Flux 10
+      description: Accepts D2F_REGULATORY_BATCH_V1 source data. The PA, not the compatible solution, owns the regulatory aggregation and generated Flux 10 documents.
+      parameters:
+        - { $ref: '#/components/parameters/connectionId' }
+        - { $ref: '#/components/parameters/idempotencyKey' }
+      requestBody:
+        required: true
+        content:
+          application/json: { schema: { type: object } }
+      responses:
+        '200': { description: PA aggregation, Flux 10 validation and simulated PPF result }
+        '409': { description: Idempotency conflict }
+        '422': { description: Canonical source data cannot produce a compliant report }
   /sandbox/v1/validate/annuaire/{flow}:
     post:
       summary: Validate DGFiP Annuaire Flux 12, 13 or 14
