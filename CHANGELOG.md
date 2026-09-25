@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.6.0 — 2026-09-25
+
+### Added
+
+- Return French supplier delivery statuses `202` and `203` from the existing sandbox lifecycle transitions.
+- Return buyer decision statuses `205` approved, `207` disputed, `208` suspended and `210` refused.
+- Keep status `212` reserved for the existing collection/payment simulation.
+
+### Safety
+
+- These codes belong only to the isolated French PA Sandbox lifecycle and do not modify the Serbian SEF connector.
+
+Support: D2F-REL-36300
+Functional commit: 86ba72990ceb8e77b70339b56a63543c80532ec7
+
 ## 0.5.2 — 2026-09-25
 
 ### Fixed

@@ -4,13 +4,13 @@ Independent French e-invoicing and Peppol simulation product for D2F Business Su
 
 > **SANDBOX / TEST ONLY — this application is not an accredited Plateforme Agréée and must never be represented as one.**
 
-## Implemented sandbox (0.5.2)
+## Implemented sandbox (0.6.0)
 
 - Independent Cloudflare Worker and D1 schema.
 - External network access disabled by default.
 - D2F Business Suite compatibility: `GET /health`, raw XML `POST /invoices`, `GET /invoices/{id}`, Bearer and configurable API-key authentication.
 - Enterprise Platform compatibility foundation: CBM `2.1.0`, `X-D2F-Connection-Id`, mandatory idempotency for canonical submissions, immutable canonical events and tenant scoping.
-- Lifecycle state machine including French status `212` for collection/payment simulation.
+- Lifecycle state machine including French supplier delivery and buyer-decision statuses `202`, `203`, `205`, `207`, `208`, `210`, plus `212` for collection/payment simulation.
 - Hash-chained test evidence.
 - Permanent sandbox warning in UI and response headers.
 - The legacy compatibility route remains structural-only and does not overstate its validation scope.
