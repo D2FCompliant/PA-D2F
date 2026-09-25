@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.5.2 — 2026-09-25
+
+### Fixed
+
+- Add the Platform-facing sandbox directory registration and resolution routes.
+- Resolve synthetic recipients at SIREN or SIRET grain while preserving tenant and connected-company isolation.
+- Validate identifier formats, activation periods and required electronic-address provenance.
+
+### Database
+
+- Migration `0002_directory_api.sql` adds the connection scope, address scheme, source reference, status and update timestamp required by the directory API.
+
+Support: D2F-REL-36207
+Functional commit: f132ad50bc793ef86a7911810688429acb1166c4
+
 ## 0.5.1 — 2026-09-25
 
 ### Added
