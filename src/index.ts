@@ -71,6 +71,18 @@ export async function route(request: Request, env: Env, _ctx?: ExecutionContext)
     return ingestEReportingSubmission(request, env, repository, auth);
   }
 
+  if (url.pathname === "/sandbox/v1/directory/entries" && request.method === "PUT") {
+    const auth = authenticate(request, env, true);
+    if (!auth) return problem(401, "INVALID_AUTH", "Enterprise bearer authentication is required.");
+    return putDirectoryEntry(request, repository, auth);
+  }
+
+  if (url.pathname === "/sandbox/v1/directory/resolve" && request.method === "POST") {
+    const auth = authenticate(request, env, true);
+    if (!auth) return problem(401, "INVALID_AUTH", "Enterprise bearer authentication is required.");
+    return resolveDirectoryEntry(request, repository, auth);
+  }
+
   const annuaireValidationMatch = url.pathname.match(/^\/sandbox\/v1\/validate\/annuaire\/(12|13|14)$/);
   if (annuaireValidationMatch && request.method === "POST") {
     const auth = authenticate(request, env, true);
@@ -111,6 +123,37 @@ export async function route(request: Request, env: Env, _ctx?: ExecutionContext)
   }
 
   return problem(404, "ROUTE_NOT_FOUND", "The requested sandbox route does not exist.");
+}
+
+async function putDirectoryEntry(request: Request, repository: SandboxRepository, auth: AuthContext): Promise<Response> {
+  const body = await request.json().catch(() => null) as Record<string, unknown> | null;
+  if (!body) return problem(400, "INVALID_DIRECTORY_ENTRY", "A JSON directory entry is required.");
+  const siren = String(body.siren || "").replace(/\s/g, "");
+  const siret = String(body.siret || "").replace(/\s/g, "") || null;
+  const electronicAddressScheme = String(body.electronicAddressScheme || "").trim();
+  const electronicAddress = String(body.electronicAddress || "").trim();
+  const sourceReference = String(body.sourceReference || "").trim();
+  const activeFrom = String(body.activeFrom || "").slice(0, 10) || null;
+  const activeTo = String(body.activeTo || "").slice(0, 10) || null;
+  if (!/^\d{9}$/.test(siren) || (siret && !/^\d{14}$/.test(siret))) return problem(422, "INVALID_DIRECTORY_IDENTIFIER", "SIREN must contain 9 digits and SIRET, when supplied, 14 digits.");
+  if (!electronicAddressScheme || !electronicAddress || !sourceReference) return problem(422, "INCOMPLETE_DIRECTORY_ENTRY", "Electronic address scheme, value and source reference are required.");
+  if ((activeFrom && !/^\d{4}-\d{2}-\d{2}$/.test(activeFrom)) || (activeTo && !/^\d{4}-\d{2}-\d{2}$/.test(activeTo)) || (activeFrom && activeTo && activeTo < activeFrom)) return problem(422, "INVALID_DIRECTORY_PERIOD", "The directory activation period is invalid.");
+  const entry = { id: crypto.randomUUID(), tenantId: auth.tenantId, connectionId: auth.connectionId, siren, siret, electronicAddressScheme, electronicAddress, sourceReference, activeFrom, activeTo, status: "active" as const };
+  await repository.ensureConnection(auth.connectionId, auth.tenantId, auth.legalEntityId);
+  await repository.replaceDirectoryEntry(entry);
+  return json(200, { ok: true, service: "d2f-pa-sandbox", environment: "sandbox", result: { status: "REGISTERED", entryId: entry.id, siren, siret, electronicAddress: { scheme: electronicAddressScheme, value: electronicAddress }, sourceReference } });
+}
+
+async function resolveDirectoryEntry(request: Request, repository: SandboxRepository, auth: AuthContext): Promise<Response> {
+  const body = await request.json().catch(() => null) as Record<string, unknown> | null;
+  const identifiers = Array.isArray(body?.identifiers) ? body.identifiers.map((value) => {
+    const item = value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+    return { scheme: String(item.scheme || "").trim().toUpperCase(), value: String(item.value || "").replace(/\s/g, "") };
+  }).filter((item) => (item.scheme === "SIREN" && /^\d{9}$/.test(item.value)) || (item.scheme === "SIRET" && /^\d{14}$/.test(item.value))) : [];
+  if (!identifiers.length) return problem(422, "DIRECTORY_IDENTIFIER_REQUIRED", "At least one valid SIREN or SIRET is required.");
+  const correlationId = request.headers.get("x-correlation-id")?.trim() || crypto.randomUUID();
+  const entry = await repository.resolveDirectoryEntry(auth.connectionId, auth.tenantId, identifiers, new Date().toISOString().slice(0, 10));
+  return json(200, { ok: true, service: "d2f-pa-sandbox", environment: "sandbox", result: entry ? { status: "RESOLVED", correlationId, entryId: entry.id, matchedIdentifier: entry.siret && identifiers.some((item) => item.scheme === "SIRET" && item.value === entry.siret) ? { scheme: "SIRET", value: entry.siret } : { scheme: "SIREN", value: entry.siren }, electronicAddress: { scheme: entry.electronicAddressScheme, value: entry.electronicAddress }, sourceReference: entry.sourceReference } : { status: "NOT_FOUND", correlationId, entryId: null, electronicAddress: null, sourceReference: null } });
 }
 
 async function submitLegacyInvoice(request: Request, env: Env, repository: SandboxRepository, auth: AuthContext): Promise<Response> {

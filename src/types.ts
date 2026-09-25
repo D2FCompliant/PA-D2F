@@ -30,6 +30,20 @@ export type StoredInvoice = {
 
 export type StoredResponse = { status: number; body: Record<string, unknown> };
 
+export type DirectoryEntry = {
+  id: string;
+  tenantId: string;
+  connectionId: string;
+  siren: string | null;
+  siret: string | null;
+  electronicAddressScheme: string;
+  electronicAddress: string;
+  sourceReference: string;
+  activeFrom: string | null;
+  activeTo: string | null;
+  status: "active" | "inactive";
+};
+
 export type AuthContext = {
   connectionId: string;
   tenantId: string;

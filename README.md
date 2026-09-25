@@ -18,6 +18,7 @@ Independent French e-invoicing and Peppol simulation product for D2F Business Su
 - Flux 1 extraction exposes the core business terms used by the simulator, including BT-49, totals and parties.
 - PPF behavior is simulated locally and never calls an external production network or invents a missing BT-49.
 - `POST /sandbox/v1/validate/ereporting` classifies Flux 10.1, 10.2, 10.3 and 10.4, runs the official DGFiP v3.2 XSD graph and returns traceable Annex 7 rule failures.
+- `PUT /sandbox/v1/directory/entries` and `POST /sandbox/v1/directory/resolve` expose the synthetic, tenant-and-company-scoped directory used by Platform tests at SIREN or SIRET grain.
 - `POST /sandbox/v1/validate/annuaire/{flow}` validates Annuaire Flux 12, 13 and 14 against the official v3.2 XSD graph.
 - The API explicitly reports `NOT_APPLICABLE` for Flux 10/Annuaire Schematron because the official DGFiP v3.2 archive does not publish those Schematron artefacts. Invoice Flux 1 continues to execute the official EN 16931 and FNFE France Schematrons.
 

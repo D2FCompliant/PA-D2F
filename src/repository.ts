@@ -1,5 +1,5 @@
 import { nextInvoiceStates } from "./lifecycle";
-import type { CanonicalEventEnvelope, InvoiceState, StoredInvoice, StoredResponse } from "./types";
+import type { CanonicalEventEnvelope, DirectoryEntry, InvoiceState, StoredInvoice, StoredResponse } from "./types";
 
 type IdempotencyRecord = { fingerprint: string; response: StoredResponse };
 
@@ -8,6 +8,26 @@ export class SandboxRepository {
 
   async ensureConnection(id: string, tenantId: string, legalEntityId: string | null): Promise<void> {
     await this.db.prepare("INSERT OR IGNORE INTO sandbox_connections (id, tenant_id, legal_entity_id, created_at) VALUES (?, ?, ?, ?)").bind(id, tenantId, legalEntityId, new Date().toISOString()).run();
+  }
+
+  async replaceDirectoryEntry(entry: DirectoryEntry): Promise<void> {
+    await this.db.batch([
+      this.db.prepare("DELETE FROM directory WHERE tenant_id = ? AND connection_id = ? AND (siren = ? OR (? IS NOT NULL AND siret = ?))")
+        .bind(entry.tenantId, entry.connectionId, entry.siren, entry.siret, entry.siret),
+      this.db.prepare("INSERT INTO directory (id, tenant_id, connection_id, siren, siret, electronic_address_scheme, electronic_address, reception_pa, active_from, active_to, source_reference, status, metadata, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+        .bind(entry.id, entry.tenantId, entry.connectionId, entry.siren, entry.siret, entry.electronicAddressScheme, entry.electronicAddress, "D2F_PA_SANDBOX", entry.activeFrom, entry.activeTo, entry.sourceReference, entry.status, JSON.stringify({ testOnly: true }), new Date().toISOString()),
+    ]);
+  }
+
+  async resolveDirectoryEntry(connectionId: string, tenantId: string, identifiers: Array<{ scheme: string; value: string }>, onDate: string): Promise<DirectoryEntry | null> {
+    for (const identifier of identifiers) {
+      const column = identifier.scheme === "SIRET" ? "siret" : identifier.scheme === "SIREN" ? "siren" : "";
+      if (!column) continue;
+      const row = await this.db.prepare(`SELECT * FROM directory WHERE tenant_id = ? AND connection_id = ? AND ${column} = ? AND status = 'active' AND (active_from IS NULL OR active_from <= ?) AND (active_to IS NULL OR active_to = '' OR active_to >= ?) ORDER BY updated_at DESC LIMIT 1`)
+        .bind(tenantId, connectionId, identifier.value, onDate, onDate).first<Record<string, unknown>>();
+      if (row) return mapDirectoryEntry(row);
+    }
+    return null;
   }
 
   async createInvoice(invoice: StoredInvoice): Promise<void> {
@@ -94,6 +114,16 @@ export class SandboxRepository {
       };
     });
   }
+}
+
+function mapDirectoryEntry(row: Record<string, unknown>): DirectoryEntry {
+  return {
+    id: String(row.id), tenantId: String(row.tenant_id), connectionId: String(row.connection_id),
+    siren: row.siren ? String(row.siren) : null, siret: row.siret ? String(row.siret) : null,
+    electronicAddressScheme: String(row.electronic_address_scheme || "0225"), electronicAddress: String(row.electronic_address),
+    sourceReference: String(row.source_reference || ""), activeFrom: row.active_from ? String(row.active_from) : null,
+    activeTo: row.active_to ? String(row.active_to) : null, status: String(row.status) === "inactive" ? "inactive" : "active",
+  };
 }
 
 function mapInvoice(row: Record<string, unknown>): StoredInvoice {

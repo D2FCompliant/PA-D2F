@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { readFile } from "node:fs/promises";
 import { validateAnnuaire } from "../src/annuaire";
 import { constantTimeEqual, hmacSha256Hex, sha256Hex } from "../src/crypto";
 import { detectEReportingFlow, validateEReporting } from "../src/e-reporting";
@@ -191,5 +192,18 @@ describe("security primitives", () => {
   it("signs the exact raw bytes for Business Suite callbacks", async () => {
     const signature = await hmacSha256Hex("secret", new TextEncoder().encode("<Invoice/>"));
     expect(signature).toMatch(/^[a-f0-9]{64}$/);
+  });
+});
+
+describe("tenant and company scoped sandbox directory API", () => {
+  it("publishes the Platform directory registration and resolution contracts", async () => {
+    const source = await readFile(new URL("../src/index.ts", import.meta.url), "utf8");
+    const repository = await readFile(new URL("../src/repository.ts", import.meta.url), "utf8");
+    expect(source).toContain('url.pathname === "/sandbox/v1/directory/entries"');
+    expect(source).toContain('url.pathname === "/sandbox/v1/directory/resolve"');
+    expect(source).toContain("tenantId: auth.tenantId, connectionId: auth.connectionId");
+    expect(source).toContain('item.scheme === "SIREN"');
+    expect(source).toContain('item.scheme === "SIRET"');
+    expect(repository).toContain("tenant_id = ? AND connection_id = ?");
   });
 });
