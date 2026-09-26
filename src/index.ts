@@ -10,7 +10,7 @@ import { assertTransition, REGULATORY_CODES } from "./lifecycle";
 import { SandboxRepository } from "./repository";
 import { simulationFlags } from "./simulation/contracts";
 import { D1ScenarioStore } from "./simulation/d1-store";
-import { executePhaseOneScenario, ScenarioServiceError } from "./simulation/service";
+import { executePhaseTwoScenario, ScenarioServiceError, type ScenarioExecutionOptions } from "./simulation/service";
 import type { AuthContext, InvoiceState, StoredInvoice, StoredResponse, ValidationIssue } from "./types";
 import { baselineNotices, detectInvoiceFormat, validateTransport, validateXmlStructure } from "./validation";
 
@@ -61,29 +61,58 @@ export async function route(request: Request, env: Env, _ctx?: ExecutionContext)
     if (!auth) return problem(401, "INVALID_AUTH", "Enterprise bearer authentication is required.");
     const flags = simulationFlags(env);
     if (!flags.dualNodeSimulation || !flags.directorySimulator) {
-      return problem(404, "PA_SIMULATION_FEATURE_DISABLED", "The Phase 1 simulation route is disabled for this environment.");
+      return problem(404, "PA_SIMULATION_FEATURE_DISABLED", "The regulatory simulation route is disabled for this environment.");
     }
     const idempotencyKey = request.headers.get("idempotency-key")?.trim() || "";
     if (idempotencyKey.length < 16 || idempotencyKey.length > 200) return problem(400, "INVALID_IDEMPOTENCY_KEY", "Idempotency-Key must contain 16 to 200 characters.");
     const body = await safeJson(request) ?? {};
+    const remotePaOutcome = String(body.remotePaOutcome || "").trim();
+    const buyerOutcome = String(body.buyerOutcome || "").trim();
+    const interruptAfter = String(body.interruptAfter || "").trim();
+    if (remotePaOutcome && !["ACCEPTED", "TEMPORARY_FAILURE", "REJECTED"].includes(remotePaOutcome)) return problem(422, "INVALID_SCENARIO_OPTION", "remotePaOutcome is not supported.");
+    if (buyerOutcome && !["DELIVERED", "TEMPORARY_FAILURE"].includes(buyerOutcome)) return problem(422, "INVALID_SCENARIO_OPTION", "buyerOutcome is not supported.");
+    if (interruptAfter && !["DIRECTORY_RESOLVED", "PAR_ACCEPTED"].includes(interruptAfter)) return problem(422, "INVALID_SCENARIO_OPTION", "interruptAfter is not supported.");
     try {
-      const response = await executePhaseOneScenario({
+      const response = await executePhaseTwoScenario({
         env,
         store: new D1ScenarioStore(env.DB),
         connectionId: auth.connectionId,
         initiatingTenantId: auth.tenantId,
         idempotencyKey,
+        validateCanonical,
         transactionId: String(body.transactionId || "").trim() || undefined,
         correlationId: request.headers.get("x-correlation-id")?.trim() || String(body.correlationId || "").trim() || undefined,
+        options: {
+          directoryScheme: String(body.directoryScheme || "").trim() || undefined,
+          directoryIdentifier: String(body.directoryIdentifier || "").trim() || undefined,
+          remotePaOutcome: remotePaOutcome as ScenarioExecutionOptions["remotePaOutcome"],
+          buyerOutcome: buyerOutcome as ScenarioExecutionOptions["buyerOutcome"],
+          interruptAfter: interruptAfter as ScenarioExecutionOptions["interruptAfter"],
+          resumeFromExecutionRunId: String(body.resumeFromExecutionRunId || "").trim() || undefined,
+        },
       });
       return json(response.status, response.body);
     } catch (error) {
       if (error instanceof ScenarioServiceError) {
-        const status = error.code === "SIMULATION_TRANSACTION_NOT_FOUND" ? 404 : 409;
+        const status = ["SIMULATION_TRANSACTION_NOT_FOUND", "SIMULATION_RUN_NOT_FOUND"].includes(error.code) ? 404 : 409;
         return problem(status, error.code, error.message);
       }
       throw error;
     }
+  }
+
+  const simulationTransactionMatch = url.pathname.match(/^\/sandbox\/v1\/transactions\/([^/]+)$/);
+  if (simulationTransactionMatch && request.method === "GET") {
+    const auth = authenticate(request, env, true);
+    if (!auth) return problem(401, "INVALID_AUTH", "Enterprise bearer authentication is required.");
+    const flags = simulationFlags(env);
+    if (!flags.dualNodeSimulation || !flags.directorySimulator) {
+      return problem(404, "PA_SIMULATION_FEATURE_DISABLED", "The regulatory simulation route is disabled for this environment.");
+    }
+    const trace = await new D1ScenarioStore(env.DB).getTrace(decodeURIComponent(simulationTransactionMatch[1] ?? ""), auth.connectionId);
+    return trace
+      ? json(200, { ok: true, environment: "sandbox", testEvidence: true, ...trace })
+      : problem(404, "SIMULATION_TRANSACTION_NOT_FOUND", "No simulation transaction matches this identifier in the connection scope.");
   }
 
   if (url.pathname === "/sandbox/v1/validate/flux1" && request.method === "POST") {
@@ -526,7 +555,8 @@ function openApi(env: Env): string {
   return `openapi: 3.1.0
 info:
   title: D2F PA Sandbox API
-  version: ${env.APP_VERSION}
+  version: 0.8.0-candidate
+  x-runtime-version: ${env.APP_VERSION}
   description: SANDBOX / TEST ONLY. This service is not an accredited Plateforme Agréée.
 components:
   securitySchemes:
@@ -599,8 +629,8 @@ paths:
         '413': { description: Document too large }
   /sandbox/v1/scenarios/DEMO-FR-PIPELINE-001/executions:
     post:
-      summary: Execute or replay the isolated Phase 1 PAE/PAR technical scenario
-      description: Feature-flagged synthetic orchestration only. Returns a SIMULATION_BOUNDARY and never calls AIFE, PPF or a remote PA.
+      summary: Execute or replay the isolated PAE to Directory to PAR to Buyer scenario
+      description: Feature-flagged synthetic orchestration only. REAL_REGULATORY_VALIDATION is reported separately from SIMULATED_DIRECTORY and SIMULATED_REMOTE_PA. Returns a SIMULATION_BOUNDARY and never calls AIFE, PPF or a remote PA.
       parameters:
         - { $ref: '#/components/parameters/connectionId' }
         - { $ref: '#/components/parameters/idempotencyKey' }
@@ -613,12 +643,35 @@ paths:
               properties:
                 transactionId: { type: string, format: uuid, description: Existing sandbox transaction to replay without creating a new business invoice }
                 correlationId: { type: string, format: uuid }
+                directoryScheme: { type: string, example: '0225' }
+                directoryIdentifier:
+                  type: string
+                  enum: [TEST-FR-BUYER-001, TEST-FR-NOT-FOUND, TEST-FR-NO-ROUTING, TEST-FR-MULTIPLE, TEST-FR-PA-NOT-FOUND, TEST-FR-ADDRESS-DISABLED, TEST-FR-TEMPORARY]
+                remotePaOutcome: { type: string, enum: [ACCEPTED, TEMPORARY_FAILURE, REJECTED] }
+                buyerOutcome: { type: string, enum: [DELIVERED, TEMPORARY_FAILURE] }
+                interruptAfter: { type: string, enum: [DIRECTORY_RESOLVED, PAR_ACCEPTED] }
+                resumeFromExecutionRunId: { type: string, format: uuid }
+            examples:
+              happyPath:
+                value: { directoryScheme: '0225', directoryIdentifier: TEST-FR-BUYER-001, remotePaOutcome: ACCEPTED, buyerOutcome: DELIVERED }
       responses:
         '200': { description: Idempotent replay of the same execution request }
-        '202': { description: Synthetic execution completed }
+        '202': { description: Synthetic execution persisted as completed, blocked, retryable, rejected or interrupted }
         '400': { description: Invalid idempotency key }
         '404': { description: Feature disabled or simulation transaction not found }
         '409': { description: Idempotency conflict }
+        '422': { description: Invalid deterministic scenario option }
+  /sandbox/v1/transactions/{transactionId}:
+    get:
+      summary: Retrieve a connection-isolated regulatory simulation trace
+      description: Returns sanitized transaction metadata, execution runs and persisted messages. Canonical payloads, secrets, bindings and Cloudflare internals are not exposed.
+      parameters:
+        - { name: transactionId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { $ref: '#/components/parameters/connectionId' }
+      responses:
+        '200': { description: PAE, Directory, PAR and Buyer trace with transactionId, correlationId and executionRunId }
+        '401': { description: Enterprise authentication required }
+        '404': { description: Feature disabled or transaction not found in the connection scope }
   /sandbox/v1/validate/ereporting:
     post:
       summary: Validate and classify DGFiP e-reporting Flux 10.1, 10.2, 10.3 or 10.4

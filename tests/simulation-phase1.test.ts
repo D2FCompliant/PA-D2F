@@ -46,6 +46,20 @@ class MemoryScenarioStore implements ScenarioStore {
   async createRun(execution: SimulationExecution) {
     if (!this.runs.some((item) => item.executionRunId === execution.executionRunId)) this.runs.push(execution);
   }
+
+  async getExecutionRun(executionRunId: string, connectionId: string) {
+    const execution = this.runs.find((item) => item.executionRunId === executionRunId);
+    const transaction = execution ? this.transactions.get(execution.transactionId) : undefined;
+    return transaction?.connectionId === connectionId ? execution ?? null : null;
+  }
+
+  async getTrace(transactionId: string, connectionId: string) {
+    const transaction = await this.getTransaction(transactionId, connectionId);
+    if (!transaction) return null;
+    const { canonicalTransaction: _canonicalTransaction, ...safeTransaction } = transaction;
+    const runs = this.runs.filter((item) => item.transactionId === transactionId);
+    return { transaction: safeTransaction, runs, messages: runs.flatMap((item) => item.steps) };
+  }
 }
 
 function text(value: unknown): string {
@@ -97,6 +111,7 @@ describe("Phase 1 simulation foundation", () => {
       initiatingTenantId: "REAL-BUSINESS-TENANT-MUST-NOT-BE-USED",
       idempotencyKey: "phase-1-isolation-key",
       correlationId: "correlation-fixed",
+      validateCanonical,
     });
 
     expect(response.status).toBe(202);
@@ -120,15 +135,15 @@ describe("Phase 1 simulation foundation", () => {
 
   it("is idempotent and replays a transaction with a new run but the same business and correlation IDs", async () => {
     const store = new MemoryScenarioStore();
-    const first = await executePhaseOneScenario({ env: enabledEnv, store, connectionId: "connection-a", initiatingTenantId: "business-a", idempotencyKey: "phase-1-idempotent-01" });
-    const duplicate = await executePhaseOneScenario({ env: enabledEnv, store, connectionId: "connection-a", initiatingTenantId: "business-a", idempotencyKey: "phase-1-idempotent-01" });
+    const first = await executePhaseOneScenario({ env: enabledEnv, store, connectionId: "connection-a", initiatingTenantId: "business-a", idempotencyKey: "phase-1-idempotent-01", validateCanonical });
+    const duplicate = await executePhaseOneScenario({ env: enabledEnv, store, connectionId: "connection-a", initiatingTenantId: "business-a", idempotencyKey: "phase-1-idempotent-01", validateCanonical });
     expect(duplicate.status).toBe(200);
     expect(duplicate.body).toMatchObject({ transactionId: first.body.transactionId, correlationId: first.body.correlationId, executionRunId: first.body.executionRunId, idempotentReplay: true });
     expect(store.transactions.size).toBe(1);
     expect(store.runs).toHaveLength(1);
 
     store.idempotency.clear();
-    const recoveredRetry = await executePhaseOneScenario({ env: enabledEnv, store, connectionId: "connection-a", initiatingTenantId: "business-a", idempotencyKey: "phase-1-idempotent-01" });
+    const recoveredRetry = await executePhaseOneScenario({ env: enabledEnv, store, connectionId: "connection-a", initiatingTenantId: "business-a", idempotencyKey: "phase-1-idempotent-01", validateCanonical });
     expect(recoveredRetry.body.transactionId).toBe(first.body.transactionId);
     expect(recoveredRetry.body.executionRunId).toBe(first.body.executionRunId);
     expect(store.transactions.size).toBe(1);
@@ -141,6 +156,7 @@ describe("Phase 1 simulation foundation", () => {
       initiatingTenantId: "business-a",
       idempotencyKey: "phase-1-execution-replay",
       transactionId: String(first.body.transactionId),
+      validateCanonical,
     });
     expect(replay.body.transactionId).toBe(first.body.transactionId);
     expect(replay.body.correlationId).toBe(first.body.correlationId);

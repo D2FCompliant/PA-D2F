@@ -1,6 +1,6 @@
 import type { StoredResponse } from "../types";
-import type { SimulationExecution } from "./contracts";
-import type { ScenarioStore, ScenarioTransactionRecord } from "./service";
+import type { SimulationExecution, SimulationStep } from "./contracts";
+import type { ScenarioStore, ScenarioTrace, ScenarioTransactionRecord } from "./service";
 
 export class D1ScenarioStore implements ScenarioStore {
   constructor(private readonly db: D1Database) {}
@@ -43,17 +43,59 @@ export class D1ScenarioStore implements ScenarioStore {
     return stored;
   }
 
+  async getExecutionRun(executionRunId: string, connectionId: string): Promise<SimulationExecution | null> {
+    const row = await this.db.prepare(`SELECT r.result
+      FROM simulation_runs r
+      JOIN simulation_transactions t ON t.transaction_id = r.transaction_id
+      WHERE r.execution_run_id = ? AND t.connection_id = ?`)
+      .bind(executionRunId, connectionId).first<{ result: string }>();
+    return row ? JSON.parse(row.result) as SimulationExecution : null;
+  }
+
   async createRun(execution: SimulationExecution): Promise<void> {
-    const now = new Date().toISOString();
+    const createdAt = execution.steps[0]?.timestamp ?? new Date().toISOString();
     await this.db.batch([
       this.db.prepare(`INSERT OR IGNORE INTO simulation_runs
         (execution_run_id, transaction_id, correlation_id, status, result, created_at)
         VALUES (?, ?, ?, ?, ?, ?)`)
-        .bind(execution.executionRunId, execution.transactionId, execution.correlationId, "COMPLETED", JSON.stringify(execution), now),
+        .bind(execution.executionRunId, execution.transactionId, execution.correlationId, execution.status, JSON.stringify(execution), createdAt),
       ...execution.steps.map((step) => this.db.prepare(`INSERT OR IGNORE INTO simulation_messages
         (message_id, execution_run_id, sequence, actor, event_type, provenance, payload, created_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
-        .bind(crypto.randomUUID(), execution.executionRunId, step.sequence, step.actor, step.event, step.provenance, JSON.stringify(step.evidence), now)),
+        .bind(
+          crypto.randomUUID(),
+          execution.executionRunId,
+          step.sequence,
+          step.actor,
+          step.event,
+          step.provenance,
+          JSON.stringify(step),
+          step.timestamp,
+        )),
     ]);
+  }
+
+  async getTrace(transactionId: string, connectionId: string): Promise<ScenarioTrace | null> {
+    const transaction = await this.getTransaction(transactionId, connectionId);
+    if (!transaction) return null;
+    const runRows = await this.db.prepare(`SELECT r.result
+      FROM simulation_runs r
+      JOIN simulation_transactions t ON t.transaction_id = r.transaction_id
+      WHERE r.transaction_id = ? AND t.connection_id = ?
+      ORDER BY r.rowid`)
+      .bind(transactionId, connectionId).all<{ result: string }>();
+    const messageRows = await this.db.prepare(`SELECT m.payload
+      FROM simulation_messages m
+      JOIN simulation_runs r ON r.execution_run_id = m.execution_run_id
+      JOIN simulation_transactions t ON t.transaction_id = r.transaction_id
+      WHERE r.transaction_id = ? AND t.connection_id = ?
+      ORDER BY r.rowid, m.sequence`)
+      .bind(transactionId, connectionId).all<{ payload: string }>();
+    const { canonicalTransaction: _canonicalTransaction, ...safeTransaction } = transaction;
+    return {
+      transaction: safeTransaction,
+      runs: runRows.results.map((row) => JSON.parse(row.result) as SimulationExecution),
+      messages: messageRows.results.map((row) => JSON.parse(row.payload) as SimulationStep),
+    };
   }
 }

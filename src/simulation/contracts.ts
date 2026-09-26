@@ -38,26 +38,55 @@ export type SimulationNode = {
   credentialRef: "simulated://pae" | "simulated://par";
 };
 
+export type SimulationEventType =
+  | "PAE_RECEIVED"
+  | "PAE_VALIDATED"
+  | "DIRECTORY_LOOKUP"
+  | "DIRECTORY_RESOLVED"
+  | "DIRECTORY_NOT_FOUND"
+  | "DIRECTORY_INVALID_IDENTIFIER"
+  | "DIRECTORY_NO_ACTIVE_ROUTING"
+  | "DIRECTORY_MULTIPLE_ADDRESSES"
+  | "DIRECTORY_PA_NOT_FOUND"
+  | "DIRECTORY_ADDRESS_DISABLED"
+  | "DIRECTORY_TEMPORARY_ERROR"
+  | "PAE_ROUTED"
+  | "PAR_RECEIVED"
+  | "PAR_ACCEPTED"
+  | "PAR_REJECTED"
+  | "PAR_TEMPORARY_FAILURE"
+  | "BUYER_DELIVERED"
+  | "BUYER_TEMPORARY_FAILURE";
+
 export type SimulationStep = {
+  transactionId: string;
+  correlationId: string;
+  executionRunId: string;
   sequence: number;
   actor: SimulationRole;
-  event: string;
+  event: SimulationEventType;
   provenance: Provenance;
   result: "PASS" | "BLOCKED";
   evidence: Record<string, unknown>;
+  timestamp: string;
 };
+
+export type SimulationExecutionStatus = "COMPLETED" | "BLOCKED" | "RETRYABLE" | "REJECTED" | "INTERRUPTED";
 
 export type SimulationExecution = {
   scenarioId: typeof SIMULATION_SCENARIO_ID;
   transactionId: string;
   correlationId: string;
   executionRunId: string;
+  resumedFromExecutionRunId: string | null;
   environment: "SIMULATION";
+  status: SimulationExecutionStatus;
+  outcome: { code: string; retryable: boolean };
   validation: {
     category: "REAL_REGULATORY_VALIDATION";
     boundary: "SIMULATION_BOUNDARY";
-    status: "NOT_EXECUTED";
-    blockedBy: "PA_INTEGRATION_REQUEST_REGULATORY_RESULT";
+    status: "PASSED" | "FAILED";
+    blockedContract: "PA_INTEGRATION_REQUEST_REGULATORY_RESULT";
   };
   interoperability: {
     category: "SIMULATED_EXTERNAL_INTEROPERABILITY";

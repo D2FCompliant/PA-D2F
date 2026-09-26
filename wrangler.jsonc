@@ -60,8 +60,8 @@
         "API_KEY_HEADER": "x-api-key",
         "DGFiP_BASELINE": "3.2",
         "CBM_VERSION": "2.1.0",
-        "PA_DUAL_NODE_SIMULATION": "false",
-        "DIRECTORY_SIMULATOR": "false",
+        "PA_DUAL_NODE_SIMULATION": "true",
+        "DIRECTORY_SIMULATOR": "true",
         "PPF_SIMULATOR": "false",
         "LIFECYCLE_SIMULATION": "false"
       },
