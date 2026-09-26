@@ -12,13 +12,13 @@
 
 ## Active scope
 
-- Phase: Phase 3 Lifecycle Simulator implementation checkpoint; no release, migration or deployment authorized.
+- Phase: Release 0.9.0 checkpoint; metadata, tag and sandbox-only deployment authorized, Phase 4 forbidden.
 - Budget: MEDIUM, split into lifecycle contract reuse, targeted tests and checkpoint gates.
 - Scenario: `DEMO-FR-PIPELINE-001`.
 - New route: `POST /sandbox/v1/scenarios/DEMO-FR-PIPELINE-001/executions`.
-- Release 0.8.0 commit: `c4bce876c0b6240ecddd9b9e8d802792e3ce35bf` (tag `v0.8.0`, pushed and deployed).
+- Phase 3 commit: `10ddae485b2f9733695a8e4a936ca5eda0d6d67e` (pushed to `origin/feature/pa-sandbox-foundation`).
 - Migration `0003_regulatory_simulation_foundation.sql` applied only to D1 `d2f-pa-sandbox` (`b082f7af-bf47-4e3a-b24b-956cb0d2a2b2`).
-- Release 0.8.0 deployment ID: `6f642c93-eb7f-4881-a02c-7a591be55bab`; rollback remains `v0.7.0` at `ff2cd75efe1cc9adacb00ed3469eacef22524fbe`.
+- Release metadata: `0.9.0`; rollback remains `v0.8.0` at `c4bce876c0b6240ecddd9b9e8d802792e3ce35bf`.
 - Additive read route: `GET /sandbox/v1/transactions/{transactionId}`.
 - Phase 3 routes: `POST /sandbox/v1/transactions/{transactionId}/lifecycle-events` and `GET /sandbox/v1/transactions/{transactionId}/lifecycle`.
 
@@ -121,4 +121,4 @@
 
 ## Next exact action
 
-Await explicit validation of the Phase 3 checkpoint before any commit, release or deployment. Do not start Phase 4.
+Complete the 0.9.0 gates, tag and sandbox-only deployment, then stop. Do not start Phase 4.

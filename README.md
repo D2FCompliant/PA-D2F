@@ -4,7 +4,7 @@ Independent French e-invoicing and Peppol simulation product for D2F Business Su
 
 > **SANDBOX / TEST ONLY — this application is not an accredited Plateforme Agréée and must never be represented as one.**
 
-## Implemented sandbox (0.8.0)
+## Implemented sandbox (0.9.0)
 
 - Independent Cloudflare Worker and D1 schema.
 - External network access disabled by default.
@@ -28,9 +28,15 @@ The verified gaps and incremental delivery plan are in [docs/GAP-ANALYSIS.md](do
 
 The additive route `POST /sandbox/v1/scenarios/DEMO-FR-PIPELINE-001/executions` runs an isolated synthetic PAE → simulated directory → PAR → buyer-delivery pipeline. The connection-scoped `GET /sandbox/v1/transactions/{transactionId}` route exposes its sanitized persisted trace. The pipeline uses the shared canonical transaction shape and explicitly returns `SIMULATION_BOUNDARY` where a public shared regulatory contract is not yet available.
 
-The route remains disabled in root/default configuration and is enabled only in `env.sandbox` through `PA_DUAL_NODE_SIMULATION=true` and `DIRECTORY_SIMULATOR=true`. `PPF_SIMULATOR` and `LIFECYCLE_SIMULATION` remain `false`. `EXTERNAL_NETWORK_DISABLED=true` is mandatory; the Phase 2 adapters accept only `sim://` targets.
+The route remains disabled in root/default configuration and is enabled only in `env.sandbox` through `PA_DUAL_NODE_SIMULATION=true` and `DIRECTORY_SIMULATOR=true`. `PPF_SIMULATOR` remains `false`. `EXTERNAL_NETWORK_DISABLED=true` is mandatory; the Phase 2 adapters accept only `sim://` targets.
 
 Only synthetic tenants `D2F-PAE-SIM` and `D2F-PAR-SIM` are used. A Business tenant header never becomes a data-access key for this scenario, and the real D2F Compliant d.o.o. profile is neither read nor modified.
+
+## Phase 3 lifecycle simulation
+
+In `env.sandbox`, `LIFECYCLE_SIMULATION=true` extends the pipeline with technical lifecycle events propagated from the simulated buyer through PAR to PAE. The root/default value remains `false`. The additive lifecycle routes preserve connection isolation, idempotency and technical evidence provenance without claiming AIFE interoperability.
+
+Status 212 remains outside Phase 3 execution and returns `SIMULATION_BOUNDARY` while `PA_INTEGRATION_REQUEST_PAYMENT_CONTRACT` is open. A blocked 212 creates no successful lifecycle event or execution run.
 
 ## Node 22
 

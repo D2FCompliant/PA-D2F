@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.9.0 — 2026-09-26
+
+### Added
+
+- Extend the synthetic PAE → Directory Simulator → PAR → Buyer pipeline with connection-isolated lifecycle events and technical evidence.
+- Add additive lifecycle event and lifecycle trace routes with idempotent replay, duplicate-event protection and resumable PAR-to-PAE propagation.
+- Expose explicit simulated actor, lifecycle-contract source, UTC timestamp, payload hash and simulated-interoperability provenance for each lifecycle event.
+
+### Safety
+
+- Enable lifecycle simulation only in the explicit sandbox environment; root defaults remain disabled and PPF simulation remains off.
+- Keep status 212 behind `PA_INTEGRATION_REQUEST_PAYMENT_CONTRACT`; a blocked 212 persists no successful lifecycle event or execution run.
+- Reuse the existing additive `0003` tables; no D1 migration is added and all external network access remains disabled.
+
 ## 0.8.0 — 2026-09-26
 
 ### Added
