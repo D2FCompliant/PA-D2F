@@ -4,13 +4,14 @@ import { sha256Hex } from "./crypto";
 import { validateEReporting } from "./e-reporting";
 import { generateEReportingDocuments } from "./e-reporting-ingest";
 import { invoiceEvent } from "./events";
-import { extractFlux1, simulatePpf } from "./flux1";
+import { extractFlux1, simulateDirectoryRouting } from "./flux1";
 import { validateFormalInvoice } from "./formal-validation";
 import { assertTransition, lifecycleEventType, REGULATORY_CODES } from "./lifecycle";
 import { SandboxRepository } from "./repository";
 import { simulationFlags } from "./simulation/contracts";
 import { D1ScenarioStore } from "./simulation/d1-store";
 import { executeLifecycleEvent, getLifecycleView, LifecycleServiceError } from "./simulation/lifecycle-service";
+import { executePpfSubmission, getPpfSubmissionView, PpfServiceError, type PpfSubmissionRequest } from "./simulation/ppf-service";
 import { executePhaseTwoScenario, ScenarioServiceError, type ScenarioExecutionOptions } from "./simulation/service";
 import type { AuthContext, InvoiceState, StoredInvoice, StoredResponse, ValidationIssue } from "./types";
 import { baselineNotices, detectInvoiceFormat, validateTransport, validateXmlStructure } from "./validation";
@@ -100,6 +101,78 @@ export async function route(request: Request, env: Env, _ctx?: ExecutionContext)
       }
       throw error;
     }
+  }
+
+  const ppfSubmissionsMatch = url.pathname.match(/^\/sandbox\/v1\/transactions\/([^/]+)\/ppf-submissions$/);
+  if (ppfSubmissionsMatch && request.method === "POST") {
+    const auth = authenticate(request, env, true);
+    if (!auth) return problem(401, "INVALID_AUTH", "Enterprise bearer authentication is required.");
+    if (!simulationFlags(env).ppfSimulator) {
+      return problem(404, "PPF_FEATURE_DISABLED", "PPF simulation is disabled for this environment.");
+    }
+    const idempotencyKey = request.headers.get("idempotency-key")?.trim() || "";
+    if (idempotencyKey.length < 16 || idempotencyKey.length > 200) return problem(400, "INVALID_IDEMPOTENCY_KEY", "Idempotency-Key must contain 16 to 200 characters.");
+    const contentLength = Number(request.headers.get("content-length") || "0");
+    if (contentLength > MAX_BODY_BYTES) return problem(413, "DOCUMENT_TOO_LARGE", `The document exceeds ${MAX_BODY_BYTES} bytes.`);
+    const body = await safeJson(request);
+    if (!body) return problem(400, "INVALID_JSON", "A JSON object is required.");
+    const mode = String(body.mode || "").trim().toUpperCase();
+    const flow = String(body.flow || "").trim();
+    const simulatedTransportOutcome = String(body.simulatedTransportOutcome || "").trim().toUpperCase();
+    const interruptAfter = String(body.interruptAfter || "").trim().toUpperCase();
+    if (mode && !["GENERATE", "PROVIDED_PAYLOAD"].includes(mode)) return problem(422, "INVALID_PPF_OPTION", "mode is not supported.");
+    if (flow && !["10.1", "10.2", "10.3", "10.4", "UNKNOWN"].includes(flow)) return problem(422, "INVALID_PPF_OPTION", "flow is not supported.");
+    if (simulatedTransportOutcome && !["RECEIVED", "TEMPORARY_ERROR"].includes(simulatedTransportOutcome)) return problem(422, "INVALID_PPF_OPTION", "simulatedTransportOutcome is not supported.");
+    if (interruptAfter && !["BEFORE_SUBMISSION", "AFTER_SUBMISSION", "AFTER_RECEIPT"].includes(interruptAfter)) return problem(422, "INVALID_PPF_OPTION", "interruptAfter is not supported.");
+    const canonicalBatch = object(body.canonicalBatch);
+    try {
+      const response = await executePpfSubmission({
+        env,
+        store: new D1ScenarioStore(env.DB),
+        connectionId: auth.connectionId,
+        transactionId: decodeURIComponent(ppfSubmissionsMatch[1] ?? ""),
+        idempotencyKey,
+        request: {
+          mode: (mode || undefined) as PpfSubmissionRequest["mode"],
+          flow: (flow || undefined) as PpfSubmissionRequest["flow"],
+          canonicalBatch: Object.keys(canonicalBatch).length ? canonicalBatch : undefined,
+          payload: typeof body.payload === "string" ? body.payload : undefined,
+          simulatedTransportOutcome: (simulatedTransportOutcome || undefined) as PpfSubmissionRequest["simulatedTransportOutcome"],
+          interruptAfter: (interruptAfter || undefined) as PpfSubmissionRequest["interruptAfter"],
+          resumeFromExecutionRunId: String(body.resumeFromExecutionRunId || "").trim() || undefined,
+        },
+      });
+      return json(response.status, response.body);
+    } catch (error) {
+      if (error instanceof PpfServiceError) {
+        const status = ["SIMULATION_TRANSACTION_NOT_FOUND", "SIMULATION_RUN_NOT_FOUND", "PPF_FEATURE_DISABLED"].includes(error.code)
+          ? 404
+          : error.code === "IDEMPOTENCY_CONFLICT" ? 409 : 422;
+        return json(status, {
+          ok: false,
+          error: { code: error.code, message: error.message, ...(error.blockedBy ? { blockedBy: error.blockedBy } : {}) },
+          environment: "sandbox",
+          correlationId: crypto.randomUUID(),
+        });
+      }
+      throw error;
+    }
+  }
+
+  if (ppfSubmissionsMatch && request.method === "GET") {
+    const auth = authenticate(request, env, true);
+    if (!auth) return problem(401, "INVALID_AUTH", "Enterprise bearer authentication is required.");
+    if (!simulationFlags(env).ppfSimulator) {
+      return problem(404, "PPF_FEATURE_DISABLED", "PPF simulation is disabled for this environment.");
+    }
+    const view = await getPpfSubmissionView(
+      new D1ScenarioStore(env.DB),
+      decodeURIComponent(ppfSubmissionsMatch[1] ?? ""),
+      auth.connectionId,
+    );
+    return view
+      ? json(200, { ok: true, environment: "sandbox", ...view })
+      : problem(404, "SIMULATION_TRANSACTION_NOT_FOUND", "No simulation transaction matches this identifier in the connection scope.");
   }
 
   const lifecycleEventsMatch = url.pathname.match(/^\/sandbox\/v1\/transactions\/([^/]+)\/lifecycle-events$/);
@@ -356,9 +429,9 @@ async function validateFlux1(request: Request, env: Env, repository: SandboxRepo
     : await validateFormalInvoice(payload, format);
   const flux1 = format === "UBL" ? extractFlux1(payload) : { standard: "DGFiP Flux 1", version: "1.2", syntax: format, fields: {}, source: "20260430_Annexe-1-Flux-1-v1.2.xlsx" };
   const allIssues: ValidationIssue[] = [...initialIssues, ...formal.issues];
-  const ppfSimulation = simulatePpf(flux1 as ReturnType<typeof extractFlux1>, allIssues.some((issue) => issue.severity === "error"));
-  allIssues.push(...ppfSimulation.issues.map((item) => ({ ...item, standard: "PPF simulation", standardVersion: "sandbox" })) as ValidationIssue[]);
-  const accepted = !allIssues.some((issue) => issue.severity === "error") && ppfSimulation.status === "ACCEPTED";
+  const routingSimulation = simulateDirectoryRouting(flux1 as ReturnType<typeof extractFlux1>, allIssues.some((issue) => issue.severity === "error"));
+  allIssues.push(...routingSimulation.issues.map((item) => ({ ...item, standard: "Directory and PA routing simulation", standardVersion: "sandbox" })) as ValidationIssue[]);
+  const accepted = !allIssues.some((issue) => issue.severity === "error") && routingSimulation.status === "ACCEPTED";
   const invoice = newInvoice(auth, format, contentType, payload, fingerprint);
   invoice.currentState = accepted ? "ROUTED" : "REJECTED";
   await repository.ensureConnection(auth.connectionId, auth.tenantId, auth.legalEntityId);
@@ -371,7 +444,7 @@ async function validateFlux1(request: Request, env: Env, repository: SandboxRepo
     appVersion: env.APP_VERSION,
     correlationId: invoice.correlationId,
     category: "regulatory",
-    payload: { format, payloadSha256: fingerprint, stages: formal.stages, issues: allIssues, flux1, ppfSimulation },
+    payload: { format, payloadSha256: fingerprint, stages: formal.stages, issues: allIssues, flux1, routingSimulation },
   });
   await repository.appendEvent(invoice.id, event);
   const result = {
@@ -383,7 +456,7 @@ async function validateFlux1(request: Request, env: Env, repository: SandboxRepo
     stages: formal.stages,
     issues: allIssues,
     flux1,
-    ppfSimulation,
+    routingSimulation,
     versions: { application: env.APP_VERSION, dgfip: env.DGFiP_BASELINE, flux1: "1.2", fnfeSchematron: "1.4.0.04" },
   };
   const response: StoredResponse = { status: 200, body: { ok: true, result, environment: "sandbox", testEvidence: true } };
@@ -673,8 +746,8 @@ paths:
         '422': { description: Canonical validation errors }
   /sandbox/v1/validate/flux1:
     post:
-      summary: Validate an invoice with the official Flux 1 XSD and Schematron rules and simulate PPF submission
-      description: Returns every validation phase, failed rule, extracted Flux 1 business term and the simulated PPF routing result. No external PPF call is made.
+      summary: Validate an invoice with the official Flux 1 XSD and Schematron rules and simulate PA routing
+      description: Returns every validation phase, failed rule, extracted Flux 1 business term and the simulated Directory/PA routing result. Invoice routing never traverses the PPF Simulator.
       parameters:
         - { $ref: '#/components/parameters/connectionId' }
         - { $ref: '#/components/parameters/idempotencyKey' }
@@ -683,7 +756,7 @@ paths:
         content:
           application/xml: { schema: { type: string } }
       responses:
-        '200': { description: Structured validation and PPF simulation report }
+        '200': { description: Structured validation and Directory/PA routing simulation report }
         '409': { description: Idempotency conflict }
         '413': { description: Document too large }
   /sandbox/v1/scenarios/DEMO-FR-PIPELINE-001/executions:
@@ -766,6 +839,51 @@ paths:
         '404': { description: Feature disabled, transaction or replay run not found }
         '409': { description: Idempotency or duplicate event conflict }
         '422': { description: Transition unavailable, wrong actor, out of sequence, final state or simulation boundary }
+  /sandbox/v1/transactions/{transactionId}/ppf-submissions:
+    post:
+      summary: Generate or submit regulatory data to the isolated PPF Simulator
+      description: The PPF Simulator is only a simulated regulatory-data collector. It never routes invoices to a buyer or PAR, never calls AIFE/PPF, and distinguishes real DGFiP v3.2 XSD/Annex 7 validation from simulated interoperability.
+      parameters:
+        - { name: transactionId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { $ref: '#/components/parameters/connectionId' }
+        - { $ref: '#/components/parameters/idempotencyKey' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                mode: { type: string, enum: [GENERATE, PROVIDED_PAYLOAD] }
+                flow: { type: string, enum: ['10.1', '10.2', '10.3', '10.4'] }
+                canonicalBatch: { type: object, description: Explicitly classified synthetic D2F_REGULATORY_BATCH_V1 source }
+                payload: { type: string, description: Explicit DGFiP Flux 10 XML payload }
+                simulatedTransportOutcome: { type: string, enum: [RECEIVED, TEMPORARY_ERROR] }
+                interruptAfter: { type: string, enum: [BEFORE_SUBMISSION, AFTER_SUBMISSION, AFTER_RECEIPT] }
+                resumeFromExecutionRunId: { type: string, format: uuid }
+            examples:
+              generatedCrossBorder:
+                value: { mode: GENERATE, flow: '10.1', canonicalBatch: { type: DOCUMENT } }
+              providedPaymentPayload:
+                value: { mode: PROVIDED_PAYLOAD, flow: '10.2', payload: '<Report>...</Report>' }
+      responses:
+        '200': { description: Idempotent replay or duplicate submission response }
+        '202': { description: Persisted accepted, rejected, interrupted or retryable technical PPF submission }
+        '400': { description: Invalid JSON or idempotency key }
+        '401': { description: Enterprise authentication required }
+        '404': { description: PPF feature disabled, transaction or replay run not found }
+        '409': { description: Idempotency conflict }
+        '413': { description: Payload exceeds the sandbox request limit }
+        '422': { description: Invalid request, generation failure or explicit Payment/Country Runtime simulation boundary }
+    get:
+      summary: List connection-isolated technical PPF transmissions for one transaction
+      parameters:
+        - { name: transactionId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { $ref: '#/components/parameters/connectionId' }
+      responses:
+        '200': { description: Deduplicated PPF submission metadata, validation and evidence references }
+        '401': { description: Enterprise authentication required }
+        '404': { description: PPF feature disabled or transaction not found in the connection scope }
   /sandbox/v1/transactions/{transactionId}/lifecycle:
     get:
       summary: Retrieve the technical lifecycle trace and final simulated state

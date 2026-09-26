@@ -5,22 +5,23 @@
 - Repository: `/Volumes/Crucial X9/Codex/PA-D2F`
 - Remote: `https://github.com/D2FCompliant/PA-D2F.git`
 - Branch: `feature/pa-sandbox-foundation`
-- Baseline tag/version: `v0.8.0` / `0.8.0`
-- Baseline commit: `c4bce876c0b6240ecddd9b9e8d802792e3ce35bf`
+- Baseline tag/version: `v0.9.0` / `0.9.0`
+- Baseline commit: `b0876adc4ccd28c584b1b2c7f175e22d66d47c4e`
 - Shared reference commit: `696249b7f53dc7b1f77f0c0ae297e332ae863c88`
 - CBM public contract: `2.1.0`
 
 ## Active scope
 
-- Phase: Release 0.9.0 checkpoint; metadata, tag and sandbox-only deployment authorized, Phase 4 forbidden.
-- Budget: MEDIUM, split into lifecycle contract reuse, targeted tests and checkpoint gates.
+- Phase: Phase 4 PPF Simulator / e-reporting checkpoint; implementation complete, commit/deployment forbidden pending validation.
+- Budget: MEDIUM, split into existing e-reporting validation reuse, simulated transport, targeted tests and checkpoint gates.
 - Scenario: `DEMO-FR-PIPELINE-001`.
 - New route: `POST /sandbox/v1/scenarios/DEMO-FR-PIPELINE-001/executions`.
-- Phase 3 commit: `10ddae485b2f9733695a8e4a936ca5eda0d6d67e` (pushed to `origin/feature/pa-sandbox-foundation`).
+- Release 0.9.0 commit: `b0876adc4ccd28c584b1b2c7f175e22d66d47c4e` (tag `v0.9.0`).
 - Migration `0003_regulatory_simulation_foundation.sql` applied only to D1 `d2f-pa-sandbox` (`b082f7af-bf47-4e3a-b24b-956cb0d2a2b2`).
 - Release metadata: `0.9.0`; rollback remains `v0.8.0` at `c4bce876c0b6240ecddd9b9e8d802792e3ce35bf`.
 - Additive read route: `GET /sandbox/v1/transactions/{transactionId}`.
 - Phase 3 routes: `POST /sandbox/v1/transactions/{transactionId}/lifecycle-events` and `GET /sandbox/v1/transactions/{transactionId}/lifecycle`.
+- Phase 4 routes: `POST /sandbox/v1/transactions/{transactionId}/ppf-submissions` and `GET /sandbox/v1/transactions/{transactionId}/ppf-submissions`.
 
 ## Requirements
 
@@ -50,12 +51,23 @@
 - `REQ-PA-P3-LIFECYCLE-API`
 - `REQ-PA-P3-PAYMENT-BOUNDARY`
 - `REQ-PA-P3-SANDBOX-ACTIVATION`
+- `REQ-PA-P4-PPF-COLLECTOR`
+- `REQ-PA-P4-FLOW-10-1`
+- `REQ-PA-P4-FLOW-10-3`
+- `REQ-PA-P4-PAYMENT-BOUNDARY`
+- `REQ-PA-P4-REAL-VALIDATION`
+- `REQ-PA-P4-TECHNICAL-EVENTS`
+- `REQ-PA-P4-IDEMPOTENCE-REPLAY`
+- `REQ-PA-P4-PPF-API`
+- `REQ-PA-P4-SANDBOX-ACTIVATION`
 
 ## Shared contracts consumed
 
 - Canonical transaction/invoice shape: CBM `2.1.0`.
 - Existing PA Canonical Event Envelope: unchanged, not extended by Phase 1.
 - Existing PA lifecycle contract: `InvoiceState`, `canTransition`, `lifecycleEventType` and `REGULATORY_CODES`.
+- Existing PA e-reporting generator and DGFiP V3.2 XSD / Annex 7 validator for Flux 10.1–10.4.
+- Existing `PpfReportingAdapter`, extended additively and implemented only as `SimulatedPpfReportingAdapter` over `sim://`.
 - Integration Hub reference: commit `696249b7f53dc7b1f77f0c0ae297e332ae863c88`.
 
 ## Protected files and systems
@@ -77,6 +89,10 @@
 - `DEC-PA-008`: Phase 3 delegates transition legality to the existing lifecycle contract; it does not define a second state machine.
 - `DEC-PA-009`: documented supplier availability (203) and buyer-decision (205/207/208/210) status families define the temporary simulator actor policy.
 - `DEC-PA-010`: Phase 3 persists lifecycle events as versioned JSON envelopes in the existing `0003` run/message tables; no migration `0004` is needed.
+- `DEC-PA-011`: the PPF Simulator is a regulatory-data collector only; it never routes an invoice and is not a PAR.
+- `DEC-PA-012`: only explicit synthetic classifications drive generated 10.1/10.3 scenarios; no Country Runtime is recreated.
+- `DEC-PA-013`: 10.2/10.4 generation remains blocked by the shared Payment Contract, while explicitly supplied payloads may use the existing V3.2 validation and simulated transport.
+- `DEC-PA-014`: PPF submission metadata, hashes, validation results and technical events fit the existing `0003` JSON storage; raw XML is not persisted and no migration `0004` is needed.
 
 ## D1 isolation
 
@@ -89,11 +105,8 @@
 
 ## Feature flags
 
-- Root/global: `PA_DUAL_NODE_SIMULATION=false`, `DIRECTORY_SIMULATOR=false`.
-- Sandbox only: `PA_DUAL_NODE_SIMULATION=true`, `DIRECTORY_SIMULATOR=true`, `LIFECYCLE_SIMULATION=true`.
-- `PPF_SIMULATOR=false`
-- Root/global: `LIFECYCLE_SIMULATION=false`
-- `EXTERNAL_NETWORK_DISABLED=true`
+- Root/global: `PA_DUAL_NODE_SIMULATION=false`, `DIRECTORY_SIMULATOR=false`, `PPF_SIMULATOR=false`, `LIFECYCLE_SIMULATION=false`, `EXTERNAL_NETWORK_DISABLED=true`.
+- Sandbox only: `PA_DUAL_NODE_SIMULATION=true`, `DIRECTORY_SIMULATOR=true`, `PPF_SIMULATOR=true`, `LIFECYCLE_SIMULATION=true`, `EXTERNAL_NETWORK_DISABLED=true`.
 
 ## Integration requests
 
@@ -117,8 +130,15 @@
 - Local-only D1 emulator was initialized through existing migrations `0001`–`0003`; no remote migration was applied.
 - Phase 2 deployment: VERIFIED on release 0.8.0.
 - Phase 3 migration: NONE.
-- Phase 3 deployment: NOT PERFORMED.
+- Phase 3 deployment: VERIFIED on release 0.9.0 (baseline supplied and validated before Phase 4).
+- Phase 4 targeted tests: 35/35 PASS across Phases 1–4; Phase 4 alone: 12/12 PASS.
+- Phase 4 full PA suite: 61/61 PASS.
+- Phase 4 TypeScript build: PASS.
+- Phase 4 Wrangler types: regenerated with Node 22; `types:check` PASS.
+- Phase 4 Cloudflare dry-run: NOT PERFORMED; execution environment rejected possible private bundle egress and no deployment/egress was authorized for this checkpoint.
+- Phase 4 migration: NONE; existing `0003` tables only.
+- Phase 4 deployment: NOT PERFORMED.
 
 ## Next exact action
 
-Complete the 0.9.0 gates, tag and sandbox-only deployment, then stop. Do not start Phase 4.
+Await explicit validation of the Phase 4 checkpoint before any commit or deployment. Do not start Phase 5.

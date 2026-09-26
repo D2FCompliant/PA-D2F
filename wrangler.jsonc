@@ -62,7 +62,7 @@
         "CBM_VERSION": "2.1.0",
         "PA_DUAL_NODE_SIMULATION": "true",
         "DIRECTORY_SIMULATOR": "true",
-        "PPF_SIMULATOR": "false",
+        "PPF_SIMULATOR": "true",
         "LIFECYCLE_SIMULATION": "true"
       },
       "d1_databases": [

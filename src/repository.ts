@@ -93,7 +93,7 @@ export class SandboxRepository {
       const validationPayload = parseObject(validationEnvelope.payload);
       const issues = Array.isArray(validationPayload.issues) ? validationPayload.issues : [];
       const stages = Array.isArray(validationPayload.stages) ? validationPayload.stages : [];
-      const ppf = parseObject(validationPayload.ppfSimulation);
+      const routing = parseObject(validationPayload.routingSimulation || validationPayload.ppfSimulation);
       const flux1 = parseObject(validationPayload.flux1);
       const state = String(row.current_state || "RECEIVED");
       return {
@@ -105,8 +105,9 @@ export class SandboxRepository {
         regulatoryCode: row.regulatory_code ? String(row.regulatory_code) : null,
         flow: validationPayload.flow ? String(validationPayload.flow) : validationPayload.flux1 ? "1" : null,
         stages, issues, issueCount: issues.length,
-        ppfStatus: ppf.status ? String(ppf.status) : null,
-        externalNetworkCalled: ppf.externalNetworkCalled === true,
+        ppfStatus: null,
+        routingStatus: routing.status ? String(routing.status) : null,
+        externalNetworkCalled: routing.externalNetworkCalled === true,
         structuredDocument: Object.keys(flux1).length ? { syntax: String(flux1.syntax || row.format), standard: String(flux1.standard || "DGFiP Flux 1"), version: String(flux1.version || "1.2"), generated: true } : null,
         nextStates: nextInvoiceStates(state as InvoiceState), eventCount: Number(row.event_count || 0),
         createdAt: String(row.created_at), updatedAt: String(row.updated_at),

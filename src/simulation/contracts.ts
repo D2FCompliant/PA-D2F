@@ -1,4 +1,5 @@
 import type { InvoiceState } from "../types";
+import type { EReportingFlow, EReportingValidation } from "../e-reporting";
 
 export const SIMULATION_SCENARIO_ID = "DEMO-FR-PIPELINE-001" as const;
 
@@ -14,7 +15,7 @@ export const PA_INTEGRATION_REQUESTS = [
   "PA_INTEGRATION_REQUEST_PAYMENT_CONTRACT",
 ] as const;
 
-export type SimulationRole = "PAE" | "PAR" | "DIRECTORY" | "BUYER";
+export type SimulationRole = "PAE" | "PAR" | "DIRECTORY" | "BUYER" | "PPF";
 export type Provenance =
   | "USER_INPUT"
   | "CBM_DERIVED"
@@ -66,7 +67,14 @@ export type SimulationEventType =
   | "BUYER_TEMPORARY_FAILURE"
   | "LIFECYCLE_EVENT_EMITTED"
   | "LIFECYCLE_PAR_RECEIVED"
-  | "LIFECYCLE_PAE_RECORDED";
+  | "LIFECYCLE_PAE_RECORDED"
+  | "PPF_SUBMISSION_CREATED"
+  | "PPF_SUBMISSION_SENT"
+  | "PPF_SUBMISSION_RECEIVED"
+  | "PPF_VALIDATION_COMPLETED"
+  | "PPF_SUBMISSION_ACCEPTED"
+  | "PPF_SUBMISSION_REJECTED"
+  | "PPF_SUBMISSION_TEMPORARY_ERROR";
 
 export type SimulationLifecycleActor = "BUYER" | "PAR" | "PAE";
 
@@ -89,6 +97,38 @@ export type SimulationLifecycleEvent = {
   timestamp: string;
   evidenceReference: string;
   source: "LIFECYCLE_SIMULATOR";
+};
+
+export type PpfSubmissionOutcome =
+  | "ACCEPTED"
+  | "REJECTED_XSD"
+  | "REJECTED_BUSINESS_RULE"
+  | "INVALID_PAYLOAD"
+  | "DUPLICATE_SUBMISSION"
+  | "TEMPORARY_ERROR";
+
+export type SimulationPpfSubmission = {
+  transactionId: string;
+  correlationId: string;
+  executionRunId: string;
+  submissionId: string;
+  flow: Exclude<EReportingFlow, "UNKNOWN"> | "UNKNOWN";
+  sourceMode: "GENERATED" | "PROVIDED_PAYLOAD";
+  payloadSha256: string;
+  recordIds: string[];
+  state: "CREATED" | "SENT" | "RECEIVED" | "COMPLETED";
+  outcome: PpfSubmissionOutcome | null;
+  retryable: boolean;
+  validation: EReportingValidation | null;
+  provenance: "PPF_SIMULATED";
+  interoperabilityCategory: "SIMULATED_EXTERNAL_INTEROPERABILITY";
+  validationCategory: "REAL_REGULATORY_VALIDATION";
+  role: "REGULATORY_DATA_COLLECTOR";
+  target: "sim://ppf-reporting";
+  externalNetworkCalled: false;
+  technicalEvidenceOnly: true;
+  timestamp: string;
+  evidenceReference: string;
 };
 
 export type SimulationStep = {
@@ -134,6 +174,11 @@ export type SimulationExecution = {
     currentState: InvoiceState;
     events: SimulationLifecycleEvent[];
     paymentBoundary: "PA_INTEGRATION_REQUEST_PAYMENT_CONTRACT";
+  };
+  ppf?: {
+    submissions: SimulationPpfSubmission[];
+    paymentBoundary: "PA_INTEGRATION_REQUEST_PAYMENT_CONTRACT";
+    countryRuntimeBoundary: "PA_INTEGRATION_REQUEST_COUNTRY_RUNTIME";
   };
 };
 

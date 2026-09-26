@@ -28,5 +28,14 @@
 | REQ-PA-P3-LIFECYCLE-API | Phase 3 §7 | Additive lifecycle event POST and lifecycle trace GET routes under `/sandbox/v1` | OpenAPI and typecheck |
 | REQ-PA-P3-PAYMENT-BOUNDARY | Phase 3 §10 | Status 212 remains blocked by the shared Payment Contract request | payment boundary test |
 | REQ-PA-P3-SANDBOX-ACTIVATION | Phase 3 §2 | Lifecycle enabled only in `env.sandbox`; root remains false | generated Wrangler types and config review |
+| REQ-PA-P4-PPF-COLLECTOR | Phase 4 §1/§8/§16 | `SimulatedPpfReportingAdapter` accepts regulatory-data submissions over `sim://`; it has no invoice-routing role | Flux 10.1 trace and PPF != PAR assertions |
+| REQ-PA-P4-FLOW-10-1 | Phase 4 §4/§6 | Explicit cross-border fixture generates, validates and submits Flux 10.1 using the existing V3.2 validator | generated 10.1 happy-path test |
+| REQ-PA-P4-FLOW-10-3 | Phase 4 §4/§7 | Explicit B2C fixture generates, validates and submits Flux 10.3 without a local Country Runtime | generated 10.3 happy-path test |
+| REQ-PA-P4-PAYMENT-BOUNDARY | Phase 4 §5/§20 | Generation of 10.2/10.4 is blocked by the shared Payment Contract; explicitly supplied payloads may be validated and transported | payment boundary and supplied-payload tests |
+| REQ-PA-P4-REAL-VALIDATION | Phase 4 §4/§10 | Existing DGFiP V3.2 XSD and Annex 7 validation remains separate from simulated transport | XSD and business-rule rejection tests |
+| REQ-PA-P4-TECHNICAL-EVENTS | Phase 4 §9 | PPF submission events are technical sandbox messages with simulated provenance, not invoice lifecycle statuses | event sequence/provenance assertions |
+| REQ-PA-P4-IDEMPOTENCE-REPLAY | Phase 4 §12/§13 | Request replay, payload deduplication, three interruption cursors and temporary-error retry preserve transaction/correlation/evidence | duplicate, idempotency and resume tests |
+| REQ-PA-P4-PPF-API | Phase 4 §14 | Additive POST/GET PPF submission routes under `/sandbox/v1`; responses omit raw XML and secrets | OpenAPI, typecheck and trace tests |
+| REQ-PA-P4-SANDBOX-ACTIVATION | Phase 4 §3 | PPF enabled only in `env.sandbox`; root remains false and external networking remains disabled | generated Wrangler types and configuration review |
 
 Regulatory Result, readiness, Country Runtime and Payment Contract remain external integration requests. A result at those boundaries is `SIMULATION_BOUNDARY`, not a regulatory interpretation.

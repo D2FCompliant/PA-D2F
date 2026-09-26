@@ -53,3 +53,80 @@ export function assertSyntheticFixture(value: Record<string, unknown>): void {
     throw new Error("NON_SYNTHETIC_FIXTURE_FORBIDDEN");
   }
 }
+
+export function crossBorderEReportingFixture(): Record<string, unknown> {
+  return regulatoryReportingBatch({
+    externalId: "DEMO-FR-FOREIGN-REPORT-001",
+    number: "DEMO-FR-FOREIGN-REPORT-001",
+    obligation: "fr_transaction_data_10_1",
+    recordId: "cross-border-invoice-001",
+    invoice: {
+      id: "cross-border-invoice-001",
+      number: "FR-DE-2026-001",
+      date: "2026-09-24",
+      due_date: "2026-10-24",
+      type: "invoice",
+      customer_type: "B2B",
+      customer_country: "DE",
+      buyer_identifier_scheme: "VAT",
+      buyer_identifier: "DE123456789",
+      currency: "EUR",
+      billing_mode: "B1",
+      operation_category: "services",
+      total_ht: 100,
+      total_tva: 20,
+      total_ttc: 120,
+      tax_breakdown: [{ rate: 20, taxable_amount: 100, tax_amount: 20 }],
+    },
+  });
+}
+
+export function b2cEReportingFixture(): Record<string, unknown> {
+  return regulatoryReportingBatch({
+    externalId: "DEMO-FR-B2C-REPORT-001",
+    number: "DEMO-FR-B2C-REPORT-001",
+    obligation: "fr_b2c_transactions_10_3",
+    recordId: "b2c-invoice-001",
+    invoice: {
+      id: "b2c-invoice-001",
+      number: "FR-B2C-2026-001",
+      date: "2026-09-24",
+      customer_type: "B2C",
+      customer_country: "FR",
+      currency: "EUR",
+      operation_category: "goods",
+      total_ht: 50,
+      total_tva: 10,
+      total_ttc: 60,
+      tax_breakdown: [{ rate: 20, taxable_amount: 50, tax_amount: 10 }],
+    },
+  });
+}
+
+function regulatoryReportingBatch(input: {
+  externalId: string;
+  number: string;
+  obligation: "fr_transaction_data_10_1" | "fr_b2c_transactions_10_3";
+  recordId: string;
+  invoice: Record<string, unknown>;
+}): Record<string, unknown> {
+  return {
+    type: "DOCUMENT",
+    externalId: input.externalId,
+    source: { system: "D2F_PA_SANDBOX", entity: "synthetic-fixture", recordId: input.recordId, synthetic: true },
+    document: {
+      kind: "REGULATORY_REPORTING_BATCH",
+      number: input.number,
+      payload: {
+        schema: "D2F_REGULATORY_BATCH_V1",
+        profile: "FR_PA",
+        classificationSource: "EXPLICIT_SYNTHETIC_SCENARIO",
+        company: { legal_name: "Synthetic French Seller", siren: "987654321", synthetic: true },
+        period: { start: "2026-09-01", end: "2026-09-25" },
+        obligations: [{ id: input.obligation, candidate_ids: [input.recordId] }],
+        records: { invoices: [input.invoice], payments: [] },
+      },
+    },
+    metadata: { syntheticTestEntity: true, fixture: input.externalId, provenance: "USER_INPUT" },
+  };
+}

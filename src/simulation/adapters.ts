@@ -1,4 +1,4 @@
-import type { Provenance } from "./contracts";
+import type { PpfSubmissionOutcome, Provenance } from "./contracts";
 
 export type DirectoryResolutionStatus =
   | "FOUND"
@@ -26,9 +26,20 @@ export interface DirectoryAdapter {
 }
 
 export interface PpfReportingAdapter {
-  submit(input: { transactionId: string; executionRunId: string; payload: Record<string, unknown> }): Promise<{
-    status: "ACCEPTED" | "REJECTED";
+  submit(input: {
+    transactionId: string;
+    correlationId: string;
+    executionRunId: string;
+    endpoint: string;
+    payloadSha256: string;
+    validationOutcome: Exclude<PpfSubmissionOutcome, "DUPLICATE_SUBMISSION" | "TEMPORARY_ERROR">;
+  }): Promise<{
+    status: Exclude<PpfSubmissionOutcome, "DUPLICATE_SUBMISSION">;
     provenance: "PPF_SIMULATED";
+    interoperabilityCategory: "SIMULATED_EXTERNAL_INTEROPERABILITY";
+    target: "sim://ppf-reporting";
+    retryable: boolean;
+    externalNetworkCalled: false;
   }>;
 }
 
@@ -152,6 +163,32 @@ export class SimulatedBuyerAdapter implements BuyerAdapter {
       status: this.outcome,
       provenance: "REMOTE_PA_SIMULATED" as const,
       buyer: "TEST-FR-BUYER-001" as const,
+    };
+  }
+}
+
+export class SimulatedPpfReportingAdapter implements PpfReportingAdapter {
+  constructor(
+    private readonly externalNetworkDisabled: boolean,
+    private readonly transportOutcome: "RECEIVED" | "TEMPORARY_ERROR" = "RECEIVED",
+  ) {}
+
+  async submit(input: {
+    transactionId: string;
+    correlationId: string;
+    executionRunId: string;
+    endpoint: string;
+    payloadSha256: string;
+    validationOutcome: Exclude<PpfSubmissionOutcome, "DUPLICATE_SUBMISSION" | "TEMPORARY_ERROR">;
+  }) {
+    assertSimulationTarget(input.endpoint, this.externalNetworkDisabled);
+    return {
+      status: this.transportOutcome === "TEMPORARY_ERROR" ? "TEMPORARY_ERROR" as const : input.validationOutcome,
+      provenance: "PPF_SIMULATED" as const,
+      interoperabilityCategory: "SIMULATED_EXTERNAL_INTEROPERABILITY" as const,
+      target: "sim://ppf-reporting" as const,
+      retryable: this.transportOutcome === "TEMPORARY_ERROR",
+      externalNetworkCalled: false as const,
     };
   }
 }

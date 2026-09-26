@@ -5,7 +5,7 @@ import { constantTimeEqual, hmacSha256Hex, sha256Hex } from "../src/crypto";
 import { detectEReportingFlow, validateEReporting } from "../src/e-reporting";
 import { generateEReportingDocuments } from "../src/e-reporting-ingest";
 import { assertTransition, canTransition, nextInvoiceStates, REGULATORY_CODES } from "../src/lifecycle";
-import { extractFlux1, simulatePpf } from "../src/flux1";
+import { extractFlux1, simulateDirectoryRouting } from "../src/flux1";
 import { emscriptenCallbackModuleKey, validateFormalInvoice } from "../src/formal-validation";
 import { baselineNotices, detectInvoiceFormat, validateTransport, validateXmlStructure } from "../src/validation";
 
@@ -61,9 +61,9 @@ describe("formal France validation and Flux 1", () => {
   it("extracts BT-49 for the PPF simulation without inventing it", () => {
     const flux1 = extractFlux1(routedUbl);
     expect(flux1.fields["BT-49"]).toEqual({ scheme: "0225", value: "FR123456789" });
-    expect(simulatePpf(flux1, false).status).toBe("ACCEPTED");
+    expect(simulateDirectoryRouting(flux1, false)).toMatchObject({ status: "ACCEPTED", role: "DIRECTORY_AND_PA_ROUTING", invoiceRoutedThroughPpf: false });
     const withoutBt49 = extractFlux1(validUbl);
-    expect(simulatePpf(withoutBt49, false).issues[0]?.code).toBe("PPF_SIM_BT49_REQUIRED");
+    expect(simulateDirectoryRouting(withoutBt49, false).issues[0]?.code).toBe("DIRECTORY_SIM_BT49_REQUIRED");
   });
 });
 

@@ -60,12 +60,14 @@ export function extractFlux1(payload: string) {
   };
 }
 
-export function simulatePpf(flux1: ReturnType<typeof extractFlux1>, hasErrors: boolean) {
+export function simulateDirectoryRouting(flux1: ReturnType<typeof extractFlux1>, hasErrors: boolean) {
   const bt49 = object(flux1.fields["BT-49"]);
   const address = String(bt49.value || "").trim();
-  const issues = address ? [] : [{ code: "PPF_SIM_BT49_REQUIRED", severity: "error", source: "routing", rule: "BT-49", message: "The PPF simulation requires a resolved buyer electronic address (BT-49).", path: "/Invoice/AccountingCustomerParty/Party/EndpointID" }];
+  const issues = address ? [] : [{ code: "DIRECTORY_SIM_BT49_REQUIRED", severity: "error", source: "routing", rule: "BT-49", message: "Simulated PA routing requires a resolved buyer electronic address (BT-49).", path: "/Invoice/AccountingCustomerParty/Party/EndpointID" }];
   return {
     mode: "SIMULATION",
+    role: "DIRECTORY_AND_PA_ROUTING",
+    invoiceRoutedThroughPpf: false,
     externalNetworkCalled: false,
     status: hasErrors || issues.length ? "REJECTED" : "ACCEPTED",
     route: address ? { scheme: bt49.scheme || null, electronicAddress: address } : null,
