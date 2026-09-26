@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased — Phase 1 checkpoint
+
+### Added
+
+- Add a disabled-by-default PAE/PAR orchestration foundation for the synthetic `DEMO-FR-PIPELINE-001` scenario.
+- Add synthetic tenant isolation, transaction/correlation/execution identifiers, idempotent replay and simulation provenance.
+- Add network guards that reject any non-`sim://` target with `EXTERNAL_NETWORK_BLOCKED` before transport.
+- Add an additive D1 migration proposal for PA Sandbox simulation transactions, runs and messages. It has not been applied.
+
+### Safety
+
+- Preserve 0.6.0 behavior while all new flags are off.
+- Do not implement or duplicate shared Regulatory Result, readiness, Country Runtime or Payment contracts.
+- Do not read or modify the D2F Compliant d.o.o. Business profile or its `RS_SEF` configuration.
+
 ## 0.6.0 — 2026-09-25
 
 ### Added

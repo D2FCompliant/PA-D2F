@@ -8,6 +8,9 @@ import { extractFlux1, simulatePpf } from "./flux1";
 import { validateFormalInvoice } from "./formal-validation";
 import { assertTransition, REGULATORY_CODES } from "./lifecycle";
 import { SandboxRepository } from "./repository";
+import { simulationFlags } from "./simulation/contracts";
+import { D1ScenarioStore } from "./simulation/d1-store";
+import { executePhaseOneScenario, ScenarioServiceError } from "./simulation/service";
 import type { AuthContext, InvoiceState, StoredInvoice, StoredResponse, ValidationIssue } from "./types";
 import { baselineNotices, detectInvoiceFormat, validateTransport, validateXmlStructure } from "./validation";
 
@@ -51,6 +54,36 @@ export async function route(request: Request, env: Env, _ctx?: ExecutionContext)
     const auth = authenticate(request, env, true);
     if (!auth) return problem(401, "INVALID_AUTH", "Enterprise bearer authentication is required.");
     return submitCanonicalTransaction(request, env, repository, auth);
+  }
+
+  if (url.pathname === "/sandbox/v1/scenarios/DEMO-FR-PIPELINE-001/executions" && request.method === "POST") {
+    const auth = authenticate(request, env, true);
+    if (!auth) return problem(401, "INVALID_AUTH", "Enterprise bearer authentication is required.");
+    const flags = simulationFlags(env);
+    if (!flags.dualNodeSimulation || !flags.directorySimulator) {
+      return problem(404, "PA_SIMULATION_FEATURE_DISABLED", "The Phase 1 simulation route is disabled for this environment.");
+    }
+    const idempotencyKey = request.headers.get("idempotency-key")?.trim() || "";
+    if (idempotencyKey.length < 16 || idempotencyKey.length > 200) return problem(400, "INVALID_IDEMPOTENCY_KEY", "Idempotency-Key must contain 16 to 200 characters.");
+    const body = await safeJson(request) ?? {};
+    try {
+      const response = await executePhaseOneScenario({
+        env,
+        store: new D1ScenarioStore(env.DB),
+        connectionId: auth.connectionId,
+        initiatingTenantId: auth.tenantId,
+        idempotencyKey,
+        transactionId: String(body.transactionId || "").trim() || undefined,
+        correlationId: request.headers.get("x-correlation-id")?.trim() || String(body.correlationId || "").trim() || undefined,
+      });
+      return json(response.status, response.body);
+    } catch (error) {
+      if (error instanceof ScenarioServiceError) {
+        const status = error.code === "SIMULATION_TRANSACTION_NOT_FOUND" ? 404 : 409;
+        return problem(status, error.code, error.message);
+      }
+      throw error;
+    }
   }
 
   if (url.pathname === "/sandbox/v1/validate/flux1" && request.method === "POST") {
@@ -437,7 +470,7 @@ function publicInvoice(invoice: StoredInvoice): Record<string, unknown> {
   return { id: invoice.remoteId, remote_id: invoice.remoteId, status: invoice.currentState.toLowerCase(), format: invoice.format, correlation_id: invoice.correlationId, created_at: invoice.createdAt, updated_at: invoice.updatedAt, environment: "sandbox" };
 }
 
-function validateCanonical(body: Record<string, unknown>): ValidationIssue[] {
+export function validateCanonical(body: Record<string, unknown>): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
   if (body.type !== "INVOICE") issues.push(validationIssue("UNSUPPORTED_TRANSACTION_TYPE", "business", "CBM-TYPE-001", "This increment accepts canonical INVOICE transactions only."));
   if (!String(body.externalId || "").trim()) issues.push(validationIssue("MISSING_SOURCE_REQUIRED_FIELD", "business", "CBM-EXT-001", "externalId is required.", "/externalId"));
@@ -564,6 +597,28 @@ paths:
         '200': { description: Structured validation and PPF simulation report }
         '409': { description: Idempotency conflict }
         '413': { description: Document too large }
+  /sandbox/v1/scenarios/DEMO-FR-PIPELINE-001/executions:
+    post:
+      summary: Execute or replay the isolated Phase 1 PAE/PAR technical scenario
+      description: Feature-flagged synthetic orchestration only. Returns a SIMULATION_BOUNDARY and never calls AIFE, PPF or a remote PA.
+      parameters:
+        - { $ref: '#/components/parameters/connectionId' }
+        - { $ref: '#/components/parameters/idempotencyKey' }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                transactionId: { type: string, format: uuid, description: Existing sandbox transaction to replay without creating a new business invoice }
+                correlationId: { type: string, format: uuid }
+      responses:
+        '200': { description: Idempotent replay of the same execution request }
+        '202': { description: Synthetic execution completed }
+        '400': { description: Invalid idempotency key }
+        '404': { description: Feature disabled or simulation transaction not found }
+        '409': { description: Idempotency conflict }
   /sandbox/v1/validate/ereporting:
     post:
       summary: Validate and classify DGFiP e-reporting Flux 10.1, 10.2, 10.3 or 10.4

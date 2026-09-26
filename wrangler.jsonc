@@ -31,7 +31,11 @@
     "EXTERNAL_NETWORK_DISABLED": "true",
     "API_KEY_HEADER": "x-api-key",
     "DGFiP_BASELINE": "3.2",
-    "CBM_VERSION": "2.1.0"
+    "CBM_VERSION": "2.1.0",
+    "PA_DUAL_NODE_SIMULATION": "false",
+    "DIRECTORY_SIMULATOR": "false",
+    "PPF_SIMULATOR": "false",
+    "LIFECYCLE_SIMULATION": "false"
   },
   "d1_databases": [
     {
@@ -55,7 +59,11 @@
         "EXTERNAL_NETWORK_DISABLED": "true",
         "API_KEY_HEADER": "x-api-key",
         "DGFiP_BASELINE": "3.2",
-        "CBM_VERSION": "2.1.0"
+        "CBM_VERSION": "2.1.0",
+        "PA_DUAL_NODE_SIMULATION": "false",
+        "DIRECTORY_SIMULATOR": "false",
+        "PPF_SIMULATOR": "false",
+        "LIFECYCLE_SIMULATION": "false"
       },
       "d1_databases": [
         {

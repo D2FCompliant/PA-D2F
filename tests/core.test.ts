@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { readFile } from "node:fs/promises";
 import { validateAnnuaire } from "../src/annuaire";
 import { constantTimeEqual, hmacSha256Hex, sha256Hex } from "../src/crypto";
@@ -71,12 +71,17 @@ describe("official DGFiP e-reporting and Annuaire controls", () => {
   const flux103 = `<?xml version="1.0"?><Report><ReportDocument><Id>D2F-ER-20260922</Id><IssueDateTime><DateTimeString>20260923090000</DateTimeString></IssueDateTime><TypeCode>IN</TypeCode><Sender><Id schemeId="0238">1234</Id><Name>D2F PA Sandbox</Name><RoleCode>WK</RoleCode></Sender><Issuer><Id schemeId="0002">123456789</Id><Name>Sandbox issuer</Name><RoleCode>SE</RoleCode></Issuer></ReportDocument><TransactionsReport><ReportPeriod><StartDate>20260901</StartDate><EndDate>20260922</EndDate></ReportPeriod><Transactions><Date>20260922</Date><TransactionsCurrency>EUR</TransactionsCurrency><CategoryCode>TLB1</CategoryCode><TaxExclusiveAmount>100.00</TaxExclusiveAmount><TaxTotal>20.00</TaxTotal><TransactionsCount>1</TransactionsCount><TaxSubtotal><TaxPercent>20</TaxPercent><TaxableAmount>100.00</TaxableAmount><TaxTotal>20.00</TaxTotal></TaxSubtotal></Transactions></TransactionsReport></Report>`;
 
   it("classifies Flux 10.3 and executes the official XSD plus Annex 7 controls", async () => {
-    const result = await validateEReporting(flux103, new Date("2026-09-23T12:00:00Z"));
+    const validationClock = new Date("2026-09-23T12:00:00Z");
+    const result = await validateEReporting(flux103, validationClock);
     expect(result.flow).toBe("10.3");
     expect(result.stages.find((stage) => stage.id === "xsd")?.status).toBe("PASS");
     expect(result.stages.find((stage) => stage.id === "business-rules")?.status).toBe("PASS");
     expect(result.stages.find((stage) => stage.id === "schematron")?.status).toBe("NOT_APPLICABLE");
     expect(result.issues.some((issue) => issue.code.endsWith("ENGINE-ERROR"))).toBe(false);
+
+    const future = await validateEReporting(flux103.replace("20260923090000", "20260923130000"), validationClock);
+    expect(result.issues.some((issue) => issue.code === "F10-G7.43-FUTURE")).toBe(false);
+    expect(future.issues.some((issue) => issue.code === "F10-G7.43-FUTURE")).toBe(true);
   });
 
   it("distinguishes all four Flux 10 payload shapes", () => {
@@ -109,13 +114,20 @@ describe("official DGFiP e-reporting and Annuaire controls", () => {
         },
       },
     };
-    const documents = generateEReportingDocuments(canonical);
-    expect(documents).toHaveLength(1);
-    expect(documents[0]?.flow).toBe("10.3");
-    expect(documents[0]?.xml).toContain("<TransactionsCount>2</TransactionsCount>");
-    expect(documents[0]?.xml).toContain("<TaxExclusiveAmount>150.00</TaxExclusiveAmount>");
-    const validation = await validateEReporting(documents[0]!.xml, new Date("2026-09-26T12:00:00Z"));
-    expect(validation.issues.filter((issue) => issue.severity === "error")).toEqual([]);
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-26T10:00:00Z"));
+    try {
+      const documents = generateEReportingDocuments(canonical);
+      expect(documents).toHaveLength(1);
+      expect(documents[0]?.flow).toBe("10.3");
+      expect(documents[0]?.xml).toContain("<DateTimeString>20260926100000</DateTimeString>");
+      expect(documents[0]?.xml).toContain("<TransactionsCount>2</TransactionsCount>");
+      expect(documents[0]?.xml).toContain("<TaxExclusiveAmount>150.00</TaxExclusiveAmount>");
+      const validation = await validateEReporting(documents[0]!.xml, new Date("2026-09-26T12:00:00Z"));
+      expect(validation.issues.filter((issue) => issue.severity === "error")).toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("generates PA-owned Flux 10.2 and 10.4 from collected-payment source records", async () => {
@@ -147,11 +159,18 @@ describe("official DGFiP e-reporting and Annuaire controls", () => {
         },
       },
     };
-    const documents = generateEReportingDocuments(canonical);
-    expect(documents.map((item) => item.flow)).toEqual(["10.2", "10.4"]);
-    for (const document of documents) {
-      const validation = await validateEReporting(document.xml, new Date("2026-09-26T12:00:00Z"));
-      expect(validation.issues.filter((issue) => issue.severity === "error"), document.flow).toEqual([]);
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-26T10:00:00Z"));
+    try {
+      const documents = generateEReportingDocuments(canonical);
+      expect(documents.map((item) => item.flow)).toEqual(["10.2", "10.4"]);
+      for (const document of documents) {
+        expect(document.xml).toContain("<DateTimeString>20260926100000</DateTimeString>");
+        const validation = await validateEReporting(document.xml, new Date("2026-09-26T12:00:00Z"));
+        expect(validation.issues.filter((issue) => issue.severity === "error"), document.flow).toEqual([]);
+      }
+    } finally {
+      vi.useRealTimers();
     }
   });
 

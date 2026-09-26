@@ -24,6 +24,14 @@ Independent French e-invoicing and Peppol simulation product for D2F Business Su
 
 The verified gaps and incremental delivery plan are in [docs/GAP-ANALYSIS.md](docs/GAP-ANALYSIS.md).
 
+## Phase 1 regulatory simulation foundation
+
+The additive route `POST /sandbox/v1/scenarios/DEMO-FR-PIPELINE-001/executions` proves an isolated synthetic PAE → simulated directory → PAR → buyer-delivery pipeline. It uses the shared canonical transaction shape and explicitly returns `SIMULATION_BOUNDARY` where a public shared regulatory contract is not yet available.
+
+The route is disabled by default. It requires both `PA_DUAL_NODE_SIMULATION=true` and `DIRECTORY_SIMULATOR=true`. `PPF_SIMULATOR` and `LIFECYCLE_SIMULATION` also remain `false` by default. `EXTERNAL_NETWORK_DISABLED=true` is mandatory; the Phase 1 adapters accept only `sim://` targets.
+
+Only synthetic tenants `D2F-PAE-SIM` and `D2F-PAR-SIM` are used. A Business tenant header never becomes a data-access key for this scenario, and the real D2F Compliant d.o.o. profile is neither read nor modified.
+
 ## Node 22
 
 All commands must run under Node 22:
