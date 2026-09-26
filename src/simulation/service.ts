@@ -120,11 +120,12 @@ export async function executePhaseTwoScenario(input: {
 
   const executionRunId = uuidFromHex(await sha256Hex(`${input.connectionId}:${operation}:${input.idempotencyKey}:run`));
   const externalNetworkDisabled = input.env.EXTERNAL_NETWORK_DISABLED === "true";
+  const flags = simulationFlags(input.env);
   const engine = new PhaseTwoScenarioEngine(
     new SimulatedDirectoryAdapter(),
     new SimulatedRemotePaAdapter(externalNetworkDisabled, options.remotePaOutcome ?? "ACCEPTED"),
     new SimulatedBuyerAdapter(externalNetworkDisabled, options.buyerOutcome ?? "DELIVERED"),
-    simulationFlags(input.env),
+    flags,
     externalNetworkDisabled,
   );
   let execution: SimulationExecution;
@@ -159,7 +160,7 @@ export async function executePhaseTwoScenario(input: {
         application: input.env.APP_VERSION,
         cbm: input.env.CBM_VERSION,
         integrationHubReferenceCommit: "696249b7f53dc7b1f77f0c0ae297e332ae863c88",
-        scenario: "2.0.0",
+        scenario: flags.lifecycleSimulation ? "3.0.0" : "2.0.0",
       },
     },
   };
@@ -169,7 +170,7 @@ export async function executePhaseTwoScenario(input: {
 
 export const executePhaseOneScenario = executePhaseTwoScenario;
 
-function uuidFromHex(hex: string): string {
+export function uuidFromHex(hex: string): string {
   const variant = ((Number.parseInt(hex[16] ?? "0", 16) & 0x3) | 0x8).toString(16);
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-${variant}${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
 }

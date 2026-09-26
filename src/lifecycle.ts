@@ -35,3 +35,20 @@ export function nextInvoiceStates(from: InvoiceState): readonly InvoiceState[] {
 export function assertTransition(from: InvoiceState, to: InvoiceState): void {
   if (!canTransition(from, to)) throw new Error(`OUT_OF_ORDER_LIFECYCLE: ${from} cannot transition to ${to}`);
 }
+
+export function lifecycleEventType(state: InvoiceState): string {
+  const map: Record<InvoiceState, string> = {
+    RECEIVED: "InvoiceReceivedByPa",
+    REJECTED: "InvoiceRejectedByPa",
+    ROUTED: "InvoiceRouted",
+    DELIVERED: "InvoiceDelivered",
+    MADE_AVAILABLE: "InvoiceMadeAvailable",
+    APPROVED: "InvoiceApproved",
+    REFUSED: "InvoiceRefused",
+    DISPUTED: "InvoiceDisputed",
+    SUSPENDED: "InvoiceSuspended",
+    PROCESSING: "InvoiceProcessing",
+    PAID: "LifecycleEmitted",
+  };
+  return map[state];
+}

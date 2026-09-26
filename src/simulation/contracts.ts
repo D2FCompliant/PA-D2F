@@ -1,3 +1,5 @@
+import type { InvoiceState } from "../types";
+
 export const SIMULATION_SCENARIO_ID = "DEMO-FR-PIPELINE-001" as const;
 
 export const SIMULATION_TENANTS = {
@@ -38,6 +40,11 @@ export type SimulationNode = {
   credentialRef: "simulated://pae" | "simulated://par";
 };
 
+export const SIMULATION_NODES = [
+  { id: SIMULATION_TENANTS.pae, tenantId: SIMULATION_TENANTS.pae, role: "PAE", endpoint: "sim://pae", queue: "pae-outbound", credentialRef: "simulated://pae" },
+  { id: SIMULATION_TENANTS.par, tenantId: SIMULATION_TENANTS.par, role: "PAR", endpoint: "sim://par", queue: "par-inbound", credentialRef: "simulated://par" },
+] as const satisfies readonly [SimulationNode, SimulationNode];
+
 export type SimulationEventType =
   | "PAE_RECEIVED"
   | "PAE_VALIDATED"
@@ -56,7 +63,33 @@ export type SimulationEventType =
   | "PAR_REJECTED"
   | "PAR_TEMPORARY_FAILURE"
   | "BUYER_DELIVERED"
-  | "BUYER_TEMPORARY_FAILURE";
+  | "BUYER_TEMPORARY_FAILURE"
+  | "LIFECYCLE_EVENT_EMITTED"
+  | "LIFECYCLE_PAR_RECEIVED"
+  | "LIFECYCLE_PAE_RECORDED";
+
+export type SimulationLifecycleActor = "BUYER" | "PAR" | "PAE";
+
+// Temporary sandbox evidence view. Transition semantics remain owned by
+// src/lifecycle.ts and this type must not become a parallel lifecycle contract.
+export type SimulationLifecycleEvent = {
+  transactionId: string;
+  correlationId: string;
+  executionRunId: string;
+  eventId: string;
+  actor: SimulationLifecycleActor;
+  previousState: InvoiceState;
+  eventType: string;
+  nextState: InvoiceState;
+  payload: Record<string, unknown>;
+  payloadHash: string;
+  provenance: "REMOTE_PA_SIMULATED";
+  contractSource: "PA_D2F_LIFECYCLE_CONTRACT";
+  interoperabilityCategory: "SIMULATED_EXTERNAL_INTEROPERABILITY";
+  timestamp: string;
+  evidenceReference: string;
+  source: "LIFECYCLE_SIMULATOR";
+};
 
 export type SimulationStep = {
   transactionId: string;
@@ -97,6 +130,11 @@ export type SimulationExecution = {
   };
   nodes: readonly [SimulationNode, SimulationNode];
   steps: SimulationStep[];
+  lifecycle?: {
+    currentState: InvoiceState;
+    events: SimulationLifecycleEvent[];
+    paymentBoundary: "PA_INTEGRATION_REQUEST_PAYMENT_CONTRACT";
+  };
 };
 
 export function simulationFlags(env: Env): SimulationFeatureFlags {

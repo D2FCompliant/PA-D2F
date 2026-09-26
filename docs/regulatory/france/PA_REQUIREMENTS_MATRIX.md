@@ -21,5 +21,12 @@
 | REQ-PA-P2-TRACE-API | Phase 2 §11 | Connection-scoped sanitized trace under `/sandbox/v1/transactions/{transactionId}` | trace persistence and isolation test |
 | REQ-PA-P2-OPENAPI-CANDIDATE | Phase 2 §12 | Additive OpenAPI 0.8.0 paths, examples and errors | typecheck and OpenAPI source review |
 | REQ-PA-P2-SANDBOX-ACTIVATION | Phase 2 §1/§13 | Dual-node and directory flags enabled only in `env.sandbox`; global defaults remain false | configuration regression review |
+| REQ-PA-P3-LIFECYCLE-CONTRACT | Phase 3 §1/§4 | Existing `canTransition`, lifecycle event mapping and regulatory codes remain authoritative | lifecycle happy/negative tests |
+| REQ-PA-P3-LIFECYCLE-TRACE | Phase 3 §3/§9 | Event identity, actor, states, payload hash, UTC timestamp and technical evidence reference persisted in `0003` messages | lifecycle trace assertions |
+| REQ-PA-P3-LIFECYCLE-REPLAY | Phase 3 §3/§6 | Request idempotency, eventId deduplication and replay after PAR interruption | duplicate and resume tests |
+| REQ-PA-P3-LIFECYCLE-NEGATIVE | Phase 3 §6 | Unknown, forbidden, out-of-sequence, wrong-actor and final-state requests rejected | negative lifecycle tests |
+| REQ-PA-P3-LIFECYCLE-API | Phase 3 §7 | Additive lifecycle event POST and lifecycle trace GET routes under `/sandbox/v1` | OpenAPI and typecheck |
+| REQ-PA-P3-PAYMENT-BOUNDARY | Phase 3 §10 | Status 212 remains blocked by the shared Payment Contract request | payment boundary test |
+| REQ-PA-P3-SANDBOX-ACTIVATION | Phase 3 §2 | Lifecycle enabled only in `env.sandbox`; root remains false | generated Wrangler types and config review |
 
 Regulatory Result, readiness, Country Runtime and Payment Contract remain external integration requests. A result at those boundaries is `SIMULATION_BOUNDARY`, not a regulatory interpretation.

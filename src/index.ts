@@ -6,10 +6,11 @@ import { generateEReportingDocuments } from "./e-reporting-ingest";
 import { invoiceEvent } from "./events";
 import { extractFlux1, simulatePpf } from "./flux1";
 import { validateFormalInvoice } from "./formal-validation";
-import { assertTransition, REGULATORY_CODES } from "./lifecycle";
+import { assertTransition, lifecycleEventType, REGULATORY_CODES } from "./lifecycle";
 import { SandboxRepository } from "./repository";
 import { simulationFlags } from "./simulation/contracts";
 import { D1ScenarioStore } from "./simulation/d1-store";
+import { executeLifecycleEvent, getLifecycleView, LifecycleServiceError } from "./simulation/lifecycle-service";
 import { executePhaseTwoScenario, ScenarioServiceError, type ScenarioExecutionOptions } from "./simulation/service";
 import type { AuthContext, InvoiceState, StoredInvoice, StoredResponse, ValidationIssue } from "./types";
 import { baselineNotices, detectInvoiceFormat, validateTransport, validateXmlStructure } from "./validation";
@@ -99,6 +100,69 @@ export async function route(request: Request, env: Env, _ctx?: ExecutionContext)
       }
       throw error;
     }
+  }
+
+  const lifecycleEventsMatch = url.pathname.match(/^\/sandbox\/v1\/transactions\/([^/]+)\/lifecycle-events$/);
+  if (lifecycleEventsMatch && request.method === "POST") {
+    const auth = authenticate(request, env, true);
+    if (!auth) return problem(401, "INVALID_AUTH", "Enterprise bearer authentication is required.");
+    if (!simulationFlags(env).lifecycleSimulation) {
+      return problem(404, "LIFECYCLE_FEATURE_DISABLED", "Lifecycle simulation is disabled for this environment.");
+    }
+    const idempotencyKey = request.headers.get("idempotency-key")?.trim() || "";
+    if (idempotencyKey.length < 16 || idempotencyKey.length > 200) return problem(400, "INVALID_IDEMPOTENCY_KEY", "Idempotency-Key must contain 16 to 200 characters.");
+    const body = await safeJson(request);
+    if (!body) return problem(400, "INVALID_JSON", "A JSON object is required.");
+    try {
+      const response = await executeLifecycleEvent({
+        env,
+        store: new D1ScenarioStore(env.DB),
+        connectionId: auth.connectionId,
+        transactionId: decodeURIComponent(lifecycleEventsMatch[1] ?? ""),
+        idempotencyKey,
+        request: {
+          actor: String(body.actor || "").trim() || undefined,
+          previousState: String(body.previousState || "").trim() || undefined,
+          nextState: String(body.nextState || "").trim() || undefined,
+          eventType: String(body.eventType || "").trim() || undefined,
+          eventId: String(body.eventId || "").trim() || undefined,
+          payload: object(body.payload),
+          interruptAfter: body.interruptAfter === "PAR_RECEIVED" ? "PAR_RECEIVED" : undefined,
+          resumeFromExecutionRunId: String(body.resumeFromExecutionRunId || "").trim() || undefined,
+        },
+      });
+      return json(response.status, response.body);
+    } catch (error) {
+      if (error instanceof LifecycleServiceError) {
+        const status = ["SIMULATION_TRANSACTION_NOT_FOUND", "SIMULATION_RUN_NOT_FOUND", "LIFECYCLE_FEATURE_DISABLED"].includes(error.code)
+          ? 404
+          : ["IDEMPOTENCY_CONFLICT", "LIFECYCLE_DUPLICATE_EVENT_CONFLICT"].includes(error.code) ? 409 : 422;
+        return json(status, {
+          ok: false,
+          error: { code: error.code, message: error.message, ...(error.blockedBy ? { blockedBy: error.blockedBy } : {}) },
+          environment: "sandbox",
+          correlationId: crypto.randomUUID(),
+        });
+      }
+      throw error;
+    }
+  }
+
+  const lifecycleViewMatch = url.pathname.match(/^\/sandbox\/v1\/transactions\/([^/]+)\/lifecycle$/);
+  if (lifecycleViewMatch && request.method === "GET") {
+    const auth = authenticate(request, env, true);
+    if (!auth) return problem(401, "INVALID_AUTH", "Enterprise bearer authentication is required.");
+    if (!simulationFlags(env).lifecycleSimulation) {
+      return problem(404, "LIFECYCLE_FEATURE_DISABLED", "Lifecycle simulation is disabled for this environment.");
+    }
+    const view = await getLifecycleView(
+      new D1ScenarioStore(env.DB),
+      decodeURIComponent(lifecycleViewMatch[1] ?? ""),
+      auth.connectionId,
+    );
+    return view
+      ? json(200, { ok: true, environment: "sandbox", ...view })
+      : problem(404, "SIMULATION_TRANSACTION_NOT_FOUND", "No simulation transaction matches this identifier in the connection scope.");
   }
 
   const simulationTransactionMatch = url.pathname.match(/^\/sandbox\/v1\/transactions\/([^/]+)$/);
@@ -514,11 +578,6 @@ function validationIssue(code: string, source: ValidationIssue["source"], rule: 
   return { code, severity: "error", source, rule, message, path, standard: source === "business" ? "d2f.cbm.v2" : "DGFiP external specifications", standardVersion: source === "business" ? "2.1.0" : "3.2" };
 }
 
-function lifecycleEventType(state: InvoiceState): string {
-  const map: Record<InvoiceState, string> = { RECEIVED: "InvoiceReceivedByPa", REJECTED: "InvoiceRejectedByPa", ROUTED: "InvoiceRouted", DELIVERED: "InvoiceDelivered", MADE_AVAILABLE: "InvoiceMadeAvailable", APPROVED: "InvoiceApproved", REFUSED: "InvoiceRefused", DISPUTED: "InvoiceDisputed", SUSPENDED: "InvoiceSuspended", PROCESSING: "InvoiceProcessing", PAID: "LifecycleEmitted" };
-  return map[state];
-}
-
 function object(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
@@ -630,7 +689,7 @@ paths:
   /sandbox/v1/scenarios/DEMO-FR-PIPELINE-001/executions:
     post:
       summary: Execute or replay the isolated PAE to Directory to PAR to Buyer scenario
-      description: Feature-flagged synthetic orchestration only. REAL_REGULATORY_VALIDATION is reported separately from SIMULATED_DIRECTORY and SIMULATED_REMOTE_PA. Returns a SIMULATION_BOUNDARY and never calls AIFE, PPF or a remote PA.
+      description: Feature-flagged synthetic orchestration only. With lifecycle enabled, the trace continues through documented 203 and 205 events back to PAR/PAE. REAL_REGULATORY_VALIDATION is reported separately from simulated services. Returns a SIMULATION_BOUNDARY and never calls AIFE, PPF or a remote PA.
       parameters:
         - { $ref: '#/components/parameters/connectionId' }
         - { $ref: '#/components/parameters/idempotencyKey' }
@@ -670,6 +729,51 @@ paths:
         - { $ref: '#/components/parameters/connectionId' }
       responses:
         '200': { description: PAE, Directory, PAR and Buyer trace with transactionId, correlationId and executionRunId }
+        '401': { description: Enterprise authentication required }
+        '404': { description: Feature disabled or transaction not found in the connection scope }
+  /sandbox/v1/transactions/{transactionId}/lifecycle-events:
+    post:
+      summary: Record or replay one technical sandbox lifecycle event
+      description: Uses the existing PA lifecycle transition contract. Status 212 remains blocked by PA_INTEGRATION_REQUEST_PAYMENT_CONTRACT. Evidence is technical sandbox evidence, not legal proof.
+      parameters:
+        - { name: transactionId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { $ref: '#/components/parameters/connectionId' }
+        - { $ref: '#/components/parameters/idempotencyKey' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                eventId: { type: string, format: uuid }
+                actor: { type: string, enum: [BUYER, PAR, PAE] }
+                previousState: { type: string }
+                nextState: { type: string }
+                eventType: { type: string }
+                payload: { type: object }
+                interruptAfter: { type: string, enum: [PAR_RECEIVED] }
+                resumeFromExecutionRunId: { type: string, format: uuid }
+            examples:
+              madeAvailable:
+                value: { actor: PAR, previousState: DELIVERED, nextState: MADE_AVAILABLE, eventType: InvoiceMadeAvailable }
+              buyerApproved:
+                value: { actor: BUYER, previousState: MADE_AVAILABLE, nextState: APPROVED, eventType: InvoiceApproved }
+      responses:
+        '200': { description: Idempotent request replay or duplicate event }
+        '202': { description: Lifecycle event and relay messages persisted }
+        '400': { description: Invalid JSON or idempotency key }
+        '404': { description: Feature disabled, transaction or replay run not found }
+        '409': { description: Idempotency or duplicate event conflict }
+        '422': { description: Transition unavailable, wrong actor, out of sequence, final state or simulation boundary }
+  /sandbox/v1/transactions/{transactionId}/lifecycle:
+    get:
+      summary: Retrieve the technical lifecycle trace and final simulated state
+      parameters:
+        - { name: transactionId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { $ref: '#/components/parameters/connectionId' }
+      responses:
+        '200': { description: Deduplicated lifecycle events, current state and payment boundary }
         '401': { description: Enterprise authentication required }
         '404': { description: Feature disabled or transaction not found in the connection scope }
   /sandbox/v1/validate/ereporting:

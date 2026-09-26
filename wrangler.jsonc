@@ -63,7 +63,7 @@
         "PA_DUAL_NODE_SIMULATION": "true",
         "DIRECTORY_SIMULATOR": "true",
         "PPF_SIMULATOR": "false",
-        "LIFECYCLE_SIMULATION": "false"
+        "LIFECYCLE_SIMULATION": "true"
       },
       "d1_databases": [
         {

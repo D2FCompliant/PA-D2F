@@ -7,20 +7,18 @@ import {
 } from "./adapters";
 import {
   requirePhaseOneFlags,
+  SIMULATION_NODES,
   SIMULATION_SCENARIO_ID,
   SIMULATION_TENANTS,
   type SimulationEventType,
   type SimulationExecution,
   type SimulationExecutionStatus,
   type SimulationFeatureFlags,
-  type SimulationNode,
   type SimulationStep,
 } from "./contracts";
+import { simulateLifecycleTransition } from "./lifecycle-simulator";
 
-const NODES = [
-  { id: SIMULATION_TENANTS.pae, tenantId: SIMULATION_TENANTS.pae, role: "PAE", endpoint: "sim://pae", queue: "pae-outbound", credentialRef: "simulated://pae" },
-  { id: SIMULATION_TENANTS.par, tenantId: SIMULATION_TENANTS.par, role: "PAR", endpoint: "sim://par", queue: "par-inbound", credentialRef: "simulated://par" },
-] as const satisfies readonly [SimulationNode, SimulationNode];
+const NODES = SIMULATION_NODES;
 
 const DIRECTORY_FAILURE_EVENTS: Record<Exclude<DirectoryResolutionStatus, "FOUND">, SimulationEventType> = {
   NOT_FOUND: "DIRECTORY_NOT_FOUND",
@@ -59,6 +57,7 @@ export class PhaseTwoScenarioEngine {
     const cursor = resumeCursor(input.resumeFrom);
     const previousSequence = input.resumeFrom?.steps.reduce((max, step) => Math.max(max, step.sequence), 0) ?? 0;
     const steps: SimulationStep[] = [];
+    let lifecycle: SimulationExecution["lifecycle"];
     const add = (
       actor: SimulationStep["actor"],
       event: SimulationEventType,
@@ -108,6 +107,7 @@ export class PhaseTwoScenarioEngine {
       },
       nodes: NODES,
       steps,
+      ...(lifecycle ? { lifecycle } : {}),
     });
 
     if (cursor === "START") {
@@ -200,6 +200,38 @@ export class PhaseTwoScenarioEngine {
       category: "SIMULATED_REMOTE_PA",
       buyer: buyerResult.buyer,
     });
+    if (this.flags.lifecycleSimulation) {
+      const madeAvailable = await simulateLifecycleTransition({
+        transactionId: input.transactionId,
+        correlationId: input.correlationId,
+        executionRunId: input.executionRunId,
+        startSequence: steps.at(-1)?.sequence ?? previousSequence,
+        previousState: "DELIVERED",
+        nextState: "MADE_AVAILABLE",
+        actor: "PAR",
+        payload: { scenarioId: SIMULATION_SCENARIO_ID },
+        now: this.now,
+      });
+      steps.push(...madeAvailable.steps);
+      const approved = await simulateLifecycleTransition({
+        transactionId: input.transactionId,
+        correlationId: input.correlationId,
+        executionRunId: input.executionRunId,
+        startSequence: steps.at(-1)?.sequence ?? previousSequence,
+        previousState: "MADE_AVAILABLE",
+        nextState: "APPROVED",
+        actor: "BUYER",
+        payload: { scenarioId: SIMULATION_SCENARIO_ID },
+        now: this.now,
+      });
+      steps.push(...approved.steps);
+      lifecycle = {
+        currentState: "APPROVED",
+        events: [madeAvailable.event, approved.event],
+        paymentBoundary: "PA_INTEGRATION_REQUEST_PAYMENT_CONTRACT",
+      };
+      return finish("COMPLETED", "LIFECYCLE_APPROVED", false);
+    }
     return finish("COMPLETED", "BUYER_DELIVERED", false);
   }
 }

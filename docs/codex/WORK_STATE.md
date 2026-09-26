@@ -5,21 +5,22 @@
 - Repository: `/Volumes/Crucial X9/Codex/PA-D2F`
 - Remote: `https://github.com/D2FCompliant/PA-D2F.git`
 - Branch: `feature/pa-sandbox-foundation`
-- Baseline tag/version: `v0.7.0` / `0.7.0`
-- Baseline commit: `ff2cd75efe1cc9adacb00ed3469eacef22524fbe`
+- Baseline tag/version: `v0.8.0` / `0.8.0`
+- Baseline commit: `c4bce876c0b6240ecddd9b9e8d802792e3ce35bf`
 - Shared reference commit: `696249b7f53dc7b1f77f0c0ae297e332ae863c88`
 - CBM public contract: `2.1.0`
 
 ## Active scope
 
-- Phase: Release 0.8.0 checkpoint; metadata and deployment validation authorized, Phase 3 forbidden.
-- Budget: MEDIUM, split into pipeline, negative/resume tests and checkpoint gates.
+- Phase: Phase 3 Lifecycle Simulator implementation checkpoint; no release, migration or deployment authorized.
+- Budget: MEDIUM, split into lifecycle contract reuse, targeted tests and checkpoint gates.
 - Scenario: `DEMO-FR-PIPELINE-001`.
 - New route: `POST /sandbox/v1/scenarios/DEMO-FR-PIPELINE-001/executions`.
-- Phase 2 commit: `5719c0f463ea032f2a4c85384e0eb9b843862f3e` (pushed to `origin/feature/pa-sandbox-foundation`).
+- Release 0.8.0 commit: `c4bce876c0b6240ecddd9b9e8d802792e3ce35bf` (tag `v0.8.0`, pushed and deployed).
 - Migration `0003_regulatory_simulation_foundation.sql` applied only to D1 `d2f-pa-sandbox` (`b082f7af-bf47-4e3a-b24b-956cb0d2a2b2`).
-- Release metadata: `0.8.0`; rollback remains `v0.7.0` at `ff2cd75efe1cc9adacb00ed3469eacef22524fbe`.
+- Release 0.8.0 deployment ID: `6f642c93-eb7f-4881-a02c-7a591be55bab`; rollback remains `v0.7.0` at `ff2cd75efe1cc9adacb00ed3469eacef22524fbe`.
 - Additive read route: `GET /sandbox/v1/transactions/{transactionId}`.
+- Phase 3 routes: `POST /sandbox/v1/transactions/{transactionId}/lifecycle-events` and `GET /sandbox/v1/transactions/{transactionId}/lifecycle`.
 
 ## Requirements
 
@@ -42,11 +43,19 @@
 - `REQ-PA-P2-TRACE-API`
 - `REQ-PA-P2-OPENAPI-CANDIDATE`
 - `REQ-PA-P2-SANDBOX-ACTIVATION`
+- `REQ-PA-P3-LIFECYCLE-CONTRACT`
+- `REQ-PA-P3-LIFECYCLE-TRACE`
+- `REQ-PA-P3-LIFECYCLE-REPLAY`
+- `REQ-PA-P3-LIFECYCLE-NEGATIVE`
+- `REQ-PA-P3-LIFECYCLE-API`
+- `REQ-PA-P3-PAYMENT-BOUNDARY`
+- `REQ-PA-P3-SANDBOX-ACTIVATION`
 
 ## Shared contracts consumed
 
 - Canonical transaction/invoice shape: CBM `2.1.0`.
 - Existing PA Canonical Event Envelope: unchanged, not extended by Phase 1.
+- Existing PA lifecycle contract: `InvoiceState`, `canTransition`, `lifecycleEventType` and `REGULATORY_CODES`.
 - Integration Hub reference: commit `696249b7f53dc7b1f77f0c0ae297e332ae863c88`.
 
 ## Protected files and systems
@@ -65,6 +74,9 @@
 - `DEC-PA-005`: root/global feature defaults remain false; Phase 2 enables dual-node and directory simulation only in the explicit `sandbox` environment.
 - `DEC-PA-006`: migration `0003` already stores all Phase 2 state; full message envelopes use the existing JSON payload column, so no migration `0004` is required.
 - `DEC-PA-007`: retries add an `executionRunId` and preserve the existing transaction/correlation IDs.
+- `DEC-PA-008`: Phase 3 delegates transition legality to the existing lifecycle contract; it does not define a second state machine.
+- `DEC-PA-009`: documented supplier availability (203) and buyer-decision (205/207/208/210) status families define the temporary simulator actor policy.
+- `DEC-PA-010`: Phase 3 persists lifecycle events as versioned JSON envelopes in the existing `0003` run/message tables; no migration `0004` is needed.
 
 ## D1 isolation
 
@@ -78,9 +90,9 @@
 ## Feature flags
 
 - Root/global: `PA_DUAL_NODE_SIMULATION=false`, `DIRECTORY_SIMULATOR=false`.
-- Sandbox only: `PA_DUAL_NODE_SIMULATION=true`, `DIRECTORY_SIMULATOR=true`.
+- Sandbox only: `PA_DUAL_NODE_SIMULATION=true`, `DIRECTORY_SIMULATOR=true`, `LIFECYCLE_SIMULATION=true`.
 - `PPF_SIMULATOR=false`
-- `LIFECYCLE_SIMULATION=false`
+- Root/global: `LIFECYCLE_SIMULATION=false`
 - `EXTERNAL_NETWORK_DISABLED=true`
 
 ## Integration requests
@@ -93,17 +105,20 @@
 ## Tests and gates
 
 - Phase 1 and Phase 2 targeted tests: 15/15 PASS.
+- Phase 1–3 targeted tests: 23/23 PASS.
 - Wrangler types: generated with Node 22.
 - TypeScript build: PASS.
 - Wrangler types check: PASS.
 - Wrangler sandbox dry-run: PASS with dual-node/directory enabled only in `env.sandbox`; no publication performed.
-- Full PA suite: 41/41 PASS. The two time-dependent e-reporting tests freeze the test runtime at `2026-09-26T10:00:00Z` and validate at `2026-09-26T12:00:00Z`; production continues to use the real server time.
+- Full PA suite: 49/49 PASS. The two time-dependent e-reporting tests freeze the test runtime at `2026-09-26T10:00:00Z` and validate at `2026-09-26T12:00:00Z`; production continues to use the real server time.
 - G7.43 invariant: a report timestamp at 09:00Z passes against a 12:00Z clock, while 13:00Z is rejected with `F10-G7.43-FUTURE`.
 - Migration: APPLIED to PA Sandbox D1 only; schema verification PASS.
 - Phase 2 migration: NONE.
 - Local-only D1 emulator was initialized through existing migrations `0001`–`0003`; no remote migration was applied.
-- Phase 2 deployment: NOT PERFORMED.
+- Phase 2 deployment: VERIFIED on release 0.8.0.
+- Phase 3 migration: NONE.
+- Phase 3 deployment: NOT PERFORMED.
 
 ## Next exact action
 
-Complete the 0.8.0 gates, tag and sandbox-only deployment, then stop. Do not start Phase 3.
+Await explicit validation of the Phase 3 checkpoint before any commit, release or deployment. Do not start Phase 4.
