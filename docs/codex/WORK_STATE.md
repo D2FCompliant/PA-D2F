@@ -5,14 +5,15 @@
 - Repository: `/Volumes/Crucial X9/Codex/PA-D2F`
 - Remote: `https://github.com/D2FCompliant/PA-D2F.git`
 - Branch: `feature/pa-sandbox-foundation`
-- Baseline tag/version: `v0.9.0` / `0.9.0`
-- Baseline commit: `b0876adc4ccd28c584b1b2c7f175e22d66d47c4e`
+- Baseline tag/version: `v1.0.0` / `1.0.0`
+- Final implementation commit: `b64a34f` (`feat(pa-sandbox): complete regulatory simulation lab`)
+- Rollback tag/commit: `v0.9.0` / `b0876adc4ccd28c584b1b2c7f175e22d66d47c4e`
 - Shared reference commit: `696249b7f53dc7b1f77f0c0ae297e332ae863c88`
 - CBM public contract: `2.1.0`
 
 ## Active scope
 
-- Phase: Final 1.0.0 implementation and release; Phase 4 committed at `f81e80c`, final trace/demos/docs implemented locally.
+- Phase: Final 1.0.0 implementation complete; Phase 4 committed at `f81e80c`, unified trace/demos/docs committed at `b64a34f`.
 - Budget: MEDIUM, split into existing e-reporting validation reuse, simulated transport, targeted tests and checkpoint gates.
 - Scenario: `DEMO-FR-PIPELINE-001`.
 - New route: `POST /sandbox/v1/scenarios/DEMO-FR-PIPELINE-001/executions`.
@@ -153,4 +154,4 @@
 
 ## Next exact action
 
-Commit release 1.0.0, push branch/tag, deploy only `d2f-pa-sandbox` env `sandbox`, then run public and authenticated-when-available smoke tests.
+No sandbox implementation remains. Maintain the four shared-contract requests plus UI access request, and consume them additively when public contracts become available; real AIFE/PPF/PA interoperability remains outside this isolated sandbox.
