@@ -12,11 +12,13 @@
 
 ## Active scope
 
-- Phase: Phase 1 checkpoint, implementation complete pending validation.
+- Phase: Phase 1 release 0.7.0 checkpoint; implementation and D1 sandbox migration complete, deployment pending gates.
 - Budget: MEDIUM, split into foundation, targeted tests, checkpoint gates.
 - Scenario: `DEMO-FR-PIPELINE-001`.
 - New route: `POST /sandbox/v1/scenarios/DEMO-FR-PIPELINE-001/executions`.
-- No migration applied; no deployment performed; no commit created at checkpoint.
+- Phase 1 commit: `b2dda627aa8911e8e175d39b770dec5ac33c0933` (pushed to `origin/feature/pa-sandbox-foundation`).
+- Migration `0003_regulatory_simulation_foundation.sql` applied only to D1 `d2f-pa-sandbox` (`b082f7af-bf47-4e3a-b24b-956cb0d2a2b2`).
+- Release metadata target: `0.7.0`; deployment not yet performed.
 
 ## Requirements
 
@@ -58,7 +60,7 @@
 - Development database: `d2f-pa-sandbox-local`.
 - Sandbox database: `d2f-pa-sandbox` (`b082f7af-bf47-4e3a-b24b-956cb0d2a2b2`).
 - The binding is declared only in PA-D2F and is not shared with Business Suite, Enterprise Platform or D2F Compliant d.o.o.
-- Proposed migration: `migrations/0003_regulatory_simulation_foundation.sql`.
+- Applied migration: `migrations/0003_regulatory_simulation_foundation.sql`.
 - Migration is additive; old 0.6.0 application code ignores the new tables, allowing application rollback.
 
 ## Feature flags
@@ -85,9 +87,9 @@
 - Wrangler sandbox dry-run: PASS; no publication performed.
 - Full PA suite: 33/33 PASS. The two time-dependent e-reporting tests now freeze the test runtime at `2026-09-26T10:00:00Z` and validate at `2026-09-26T12:00:00Z`; production continues to use the real server time.
 - G7.43 invariant: a report timestamp at 09:00Z passes against a 12:00Z clock, while 13:00Z is rejected with `F10-G7.43-FUTURE`.
-- Migration: NOT APPLIED.
+- Migration: APPLIED to PA Sandbox D1 only; schema verification PASS.
 - Deployment: NOT PERFORMED.
 
 ## Next exact action
 
-Obtain explicit approval before committing, applying migration or deploying. Do not start Phase 2.
+Run the 0.7.0 gates, create the release commit and tag, deploy only the PA Sandbox Worker, then run the prescribed smoke tests. Do not start Phase 2.

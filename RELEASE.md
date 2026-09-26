@@ -2,6 +2,6 @@
 
 Application version, Sandbox API version, XP Z12-013 contract version, DGFiP baseline, Schematron version and scenario-catalogue version are separate release dimensions.
 
-Release `0.6.0` executes the committed DGFiP Flux 1 and Flux 10 XSD baselines, the official invoice EN 16931/FNFE Schematrons, traceable Flux 10 Annex 7 rules and Annuaire Flux 12–14 XSD validation. It exposes the synthetic tenant-and-company-scoped directory contract and the French supplier delivery and buyer-decision lifecycle used by Platform tests. It is not a claim of PA accreditation, production PPF connectivity or complete XP Z12-013 certification.
+Release `0.7.0` preserves the 0.6.0 regulatory behavior and adds the disabled-by-default Phase 1 foundation for isolated PAE/PAR simulation. The new scenario remains inaccessible while its feature flags are off. This release is not a claim of PA accreditation, AIFE/PPF interoperability, production PPF connectivity or complete XP Z12-013 certification.
 
 Production deployment for this repository means the isolated D2F PA Sandbox environment, not D2F Gestion and not a real PA network.

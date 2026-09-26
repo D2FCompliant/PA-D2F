@@ -1,13 +1,13 @@
 # Changelog
 
-## Unreleased — Phase 1 checkpoint
+## 0.7.0 — 2026-09-26
 
 ### Added
 
 - Add a disabled-by-default PAE/PAR orchestration foundation for the synthetic `DEMO-FR-PIPELINE-001` scenario.
 - Add synthetic tenant isolation, transaction/correlation/execution identifiers, idempotent replay and simulation provenance.
 - Add network guards that reject any non-`sim://` target with `EXTERNAL_NETWORK_BLOCKED` before transport.
-- Add an additive D1 migration proposal for PA Sandbox simulation transactions, runs and messages. It has not been applied.
+- Add an additive D1 migration for PA Sandbox simulation transactions, runs and messages.
 
 ### Safety
 

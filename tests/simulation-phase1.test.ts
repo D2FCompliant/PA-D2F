@@ -7,7 +7,7 @@ import { executePhaseOneScenario, type ScenarioStore, type ScenarioTransactionRe
 import type { StoredResponse } from "../src/types";
 
 const enabledEnv = {
-  APP_VERSION: "0.6.0",
+  APP_VERSION: "0.7.0",
   ENVIRONMENT: "development",
   EXTERNAL_NETWORK_DISABLED: "true",
   API_KEY_HEADER: "x-api-key",
@@ -71,7 +71,7 @@ describe("Phase 1 simulation foundation", () => {
 
     const health = await route(new Request("https://sandbox.invalid/health"), flagsOff);
     expect(health.status).toBe(200);
-    expect(await health.json()).toMatchObject({ ok: true, version: "0.6.0", externalNetworkDisabled: true });
+    expect(await health.json()).toMatchObject({ ok: true, version: "0.7.0", externalNetworkDisabled: true });
   });
 
   it("provides a synthetic happy-path fixture compatible with the current canonical validator", () => {
