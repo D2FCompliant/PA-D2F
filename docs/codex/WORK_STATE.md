@@ -12,7 +12,7 @@
 
 ## Active scope
 
-- Phase: Phase 4 PPF Simulator / e-reporting checkpoint; implementation complete, commit/deployment forbidden pending validation.
+- Phase: Final 1.0.0 implementation and release; Phase 4 committed at `f81e80c`, final trace/demos/docs implemented locally.
 - Budget: MEDIUM, split into existing e-reporting validation reuse, simulated transport, targeted tests and checkpoint gates.
 - Scenario: `DEMO-FR-PIPELINE-001`.
 - New route: `POST /sandbox/v1/scenarios/DEMO-FR-PIPELINE-001/executions`.
@@ -60,6 +60,10 @@
 - `REQ-PA-P4-IDEMPOTENCE-REPLAY`
 - `REQ-PA-P4-PPF-API`
 - `REQ-PA-P4-SANDBOX-ACTIVATION`
+- `REQ-PA-FINAL-UNIFIED-TRACE`
+- `REQ-PA-FINAL-DEMO-CATALOG`
+- `REQ-PA-FINAL-OPENAPI`
+- `REQ-PA-FINAL-UI-BOUNDARY`
 
 ## Shared contracts consumed
 
@@ -114,6 +118,7 @@
 - `PA_INTEGRATION_REQUEST_READINESS`: OPEN.
 - `PA_INTEGRATION_REQUEST_COUNTRY_RUNTIME`: OPEN.
 - `PA_INTEGRATION_REQUEST_PAYMENT_CONTRACT`: OPEN.
+- `PA_INTEGRATION_REQUEST_UI_ACCESS`: OPEN.
 
 ## Tests and gates
 
@@ -138,7 +143,14 @@
 - Phase 4 Cloudflare dry-run: NOT PERFORMED; execution environment rejected possible private bundle egress and no deployment/egress was authorized for this checkpoint.
 - Phase 4 migration: NONE; existing `0003` tables only.
 - Phase 4 deployment: NOT PERFORMED.
+- Final targeted tests: 49/49 PASS.
+- Final full PA suite: 76/76 PASS.
+- Final TypeScript build: PASS.
+- Final Wrangler types check: PASS.
+- Final Cloudflare sandbox dry-run: PASS for `d2f-pa-sandbox`, with `PPF_SIMULATOR=true`, all other sandbox simulators enabled and `EXTERNAL_NETWORK_DISABLED=true`.
+- Final `git diff --check`: PASS.
+- Final migration: NONE; existing `0003` tables only.
 
 ## Next exact action
 
-Await explicit validation of the Phase 4 checkpoint before any commit or deployment. Do not start Phase 5.
+Commit release 1.0.0, push branch/tag, deploy only `d2f-pa-sandbox` env `sandbox`, then run public and authenticated-when-available smoke tests.

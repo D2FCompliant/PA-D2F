@@ -43,7 +43,7 @@ export interface PpfReportingAdapter {
   }>;
 }
 
-export type RemotePaOutcome = "ACCEPTED" | "TEMPORARY_FAILURE" | "REJECTED";
+export type RemotePaOutcome = "ACCEPTED" | "TEMPORARY_FAILURE" | "TIMEOUT" | "REJECTED";
 export type BuyerOutcome = "DELIVERED" | "TEMPORARY_FAILURE";
 
 export interface RemotePaAdapter {

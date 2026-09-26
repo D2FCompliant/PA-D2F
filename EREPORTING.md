@@ -24,6 +24,6 @@ The PA boundary owns the following operations:
 - retain the request, generated-document fingerprints, validation evidence and idempotent response;
 - schedule and submit accepted reports to the PPF in a production PA implementation.
 
-The sandbox never claims an external PPF delivery. Its `ppfSimulation` is evidence of a local validation outcome only.
+The PPF Simulator records only simulated regulatory-data collection over `sim://`; it never claims an external PPF delivery and never routes an invoice. Generated 10.1/10.3 and explicitly supplied 10.1–10.4 payloads pass through the existing V3.2 validation before simulated acceptance/rejection. Automatic 10.2/10.4 payment generation is blocked by `PA_INTEGRATION_REQUEST_PAYMENT_CONTRACT` in the final scenario API.
 
 The legal reporting cadence is not hard-coded as a universal 24-hour interval. Enterprise Platform calculates the applicable closed period from the issuer's French VAT regime, while the PA remains responsible for regulatory aggregation, deadlines, retries and PPF submission. Source applications may hand off events more frequently, but a source-data handoff must not be displayed as a completed Flux 10 transmission.

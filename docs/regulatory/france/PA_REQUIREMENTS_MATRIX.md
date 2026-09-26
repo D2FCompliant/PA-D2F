@@ -37,5 +37,9 @@
 | REQ-PA-P4-IDEMPOTENCE-REPLAY | Phase 4 §12/§13 | Request replay, payload deduplication, three interruption cursors and temporary-error retry preserve transaction/correlation/evidence | duplicate, idempotency and resume tests |
 | REQ-PA-P4-PPF-API | Phase 4 §14 | Additive POST/GET PPF submission routes under `/sandbox/v1`; responses omit raw XML and secrets | OpenAPI, typecheck and trace tests |
 | REQ-PA-P4-SANDBOX-ACTIVATION | Phase 4 §3 | PPF enabled only in `env.sandbox`; root remains false and external networking remains disabled | generated Wrangler types and configuration review |
+| REQ-PA-FINAL-UNIFIED-TRACE | Final workstream C/D/M | Aggregate the full synthetic journey with IDs, hashes, provenance and technical evidence report | `simulation-final.test.ts` trace/report assertions |
+| REQ-PA-FINAL-DEMO-CATALOG | Final workstream H/K | Ten deterministic France demos plus isolated synthetic `MATIC-DEMO` | scenario catalogue and execution tests |
+| REQ-PA-FINAL-OPENAPI | Final workstream I | Document every final route, authentication, idempotency, correlation and errors in OpenAPI 1.0.0 | OpenAPI route regression test |
+| REQ-PA-FINAL-UI-BOUNDARY | Final workstream L | Future Business/Platform entry remains a public SSO/context integration request, not a shared-repository edit | `PA_INTEGRATION_REQUEST_UI_ACCESS` remains OPEN |
 
 Regulatory Result, readiness, Country Runtime and Payment Contract remain external integration requests. A result at those boundaries is `SIMULATION_BOUNDARY`, not a regulatory interpretation.

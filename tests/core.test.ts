@@ -48,6 +48,23 @@ describe("formal France validation and Flux 1", () => {
     expect(report.issues.filter((issue) => issue.severity === "error")).toEqual([]);
   });
 
+  it("keeps invoice XML, mandatory-field, VAT, amount and Schematron failures deterministic", async () => {
+    const malformed = await validateFormalInvoice("<Invoice", "UBL");
+    expect(malformed.issues.some((issue) => issue.severity === "error")).toBe(true);
+
+    const missingMandatory = await validateFormalInvoice(compliantFranceUbl.replace("<cbc:ID>F2026-TEST</cbc:ID>", ""), "UBL");
+    expect(missingMandatory.issues.some((issue) => issue.severity === "error")).toBe(true);
+
+    const invalidVat = await validateFormalInvoice(compliantFranceUbl.replaceAll("987654321", "123"), "UBL");
+    expect(invalidVat.issues.some((issue) => issue.severity === "error")).toBe(true);
+
+    const amountMismatch = await validateFormalInvoice(compliantFranceUbl.replace("<cbc:TaxInclusiveAmount currencyID=\"EUR\">120.00</cbc:TaxInclusiveAmount>", "<cbc:TaxInclusiveAmount currencyID=\"EUR\">130.00</cbc:TaxInclusiveAmount>"), "UBL");
+    expect(amountMismatch.issues.some((issue) => issue.severity === "error")).toBe(true);
+
+    const schematronInvalid = await validateFormalInvoice(compliantFranceUbl.replace("<cbc:Note>#PMT#Indemnité forfaitaire pour frais de recouvrement : 40 EUR.</cbc:Note>", ""), "UBL");
+    expect(schematronInvalid.stages.find((stage) => stage.id === "schematron")?.status).toBe("FAIL");
+  });
+
   it("selects precompiled Worker callback modules from the Emscripten signature byte", () => {
     const vii = new Uint8Array(35);
     vii[13] = 130;

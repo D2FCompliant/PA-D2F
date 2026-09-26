@@ -54,6 +54,22 @@ export function assertSyntheticFixture(value: Record<string, unknown>): void {
   }
 }
 
+export function invalidCanonicalFixture(): Record<string, unknown> {
+  const fixture = canonicalHappyPathFixture();
+  delete fixture.buyer;
+  return { ...fixture, externalId: "DEMO-FR-002-INVALID", metadata: { syntheticTestEntity: true, fixture: "DEMO-FR-002", provenance: "USER_INPUT" } };
+}
+
+export function maticDemoFixture(): Record<string, unknown> {
+  const fixture = canonicalHappyPathFixture();
+  return {
+    ...fixture,
+    externalId: "MATIC-DEMO-INVOICE",
+    source: { system: "D2F_PA_SANDBOX", entity: "synthetic-matic-demo", recordId: "MATIC-DEMO", synthetic: true },
+    metadata: { syntheticTestEntity: true, fixture: "MATIC-DEMO", provenance: "USER_INPUT", historicalTransactionUsed: false },
+  };
+}
+
 export function crossBorderEReportingFixture(): Record<string, unknown> {
   return regulatoryReportingBatch({
     externalId: "DEMO-FR-FOREIGN-REPORT-001",

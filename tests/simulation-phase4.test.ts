@@ -21,7 +21,7 @@ import type { StoredResponse } from "../src/types";
 
 const baseEnv = {
   DB: {} as D1Database,
-  APP_VERSION: "0.9.0",
+  APP_VERSION: "1.0.0",
   ENVIRONMENT: "sandbox",
   EXTERNAL_NETWORK_DISABLED: "true",
   API_KEY_HEADER: "x-api-key",

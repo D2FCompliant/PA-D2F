@@ -161,6 +161,13 @@ describe("Phase 2 regulatory simulation", () => {
     expect(retryStore.transactions).toHaveLength(1);
   });
 
+  it("simulates a deterministic PAR timeout and keeps it replayable", async () => {
+    const store = new MemoryScenarioStore();
+    const failed = await request(store, "phase-2-remote-timeout", { options: { remotePaOutcome: "TIMEOUT" } });
+    expect(failed.body).toMatchObject({ status: "RETRYABLE", outcome: { code: "REMOTE_PA_TIMEOUT", retryable: true } });
+    expect(JSON.stringify(failed.body)).toContain("SIMULATED_TIMEOUT");
+  });
+
   it("does not duplicate a business transaction, run or messages on an idempotent replay", async () => {
     const store = new MemoryScenarioStore();
     const first = await request(store, "phase-2-duplicate-message");

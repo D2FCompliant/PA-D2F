@@ -1,5 +1,17 @@
 # PA Integration Impact Report — Phase 1 checkpoint
 
+> Final 1.0 update: the Phase 1 foundation evolved additively through Directory, lifecycle, PPF/e-reporting, deterministic demos, unified trace and technical evidence reporting. No shared repository was modified.
+
+## Final 1.0 impact
+
+- Runtime additions remain under `src/simulation/*`; existing public endpoints are preserved and final routes are additive.
+- New routes: scenario catalogue/execution, unified transaction trace, evidence report and PPF submissions.
+- Contracts consumed unchanged: CBM 2.1.0, existing lifecycle contract, existing DGFiP V3.2/Annex 7 validation and existing adapter boundaries.
+- Open requests: Regulatory Result, readiness, Country Runtime, Payment Contract and future UI/SSO access.
+- D1 remains on additive migration `0003`; no `0004`, destructive SQL, seed or Business database access.
+- Root flags remain off; only `env.sandbox` enables the simulators. External networking remains disabled and all simulated transports use `sim://`.
+- Rollback to `v0.9.0` is application-only and leaves additive tables in place.
+
 ## Scope
 
 Add an off-by-default technical foundation for `DEMO-FR-PIPELINE-001`, without implementing Phase 2 regulatory behavior and without applying D1 migration or deploying.

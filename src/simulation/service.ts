@@ -13,7 +13,7 @@ import { PhaseTwoScenarioEngine } from "./scenario-engine";
 
 export type ScenarioTransactionRecord = {
   transactionId: string;
-  scenarioId: typeof SIMULATION_SCENARIO_ID;
+  scenarioId: string;
   connectionId: string;
   initiatingTenantId: string;
   paeTenantId: typeof SIMULATION_TENANTS.pae;
@@ -71,14 +71,17 @@ export async function executePhaseTwoScenario(input: {
   validateCanonical: (value: Record<string, unknown>) => unknown[];
   transactionId?: string;
   correlationId?: string;
+  scenarioId?: string;
+  canonicalFixture?: Record<string, unknown>;
   options?: ScenarioExecutionOptions;
 }): Promise<StoredResponse> {
-  const operation = "sandbox.scenario.DEMO-FR-PIPELINE-001.execute";
+  const scenarioId = input.scenarioId ?? SIMULATION_SCENARIO_ID;
+  const operation = `sandbox.scenario.${scenarioId}.execute`;
   const options = input.options ?? {};
-  const fixture = canonicalHappyPathFixture();
+  const fixture = input.canonicalFixture ?? canonicalHappyPathFixture();
   assertSyntheticFixture(fixture);
   const fingerprint = await sha256Hex(JSON.stringify({
-    scenarioId: SIMULATION_SCENARIO_ID,
+    scenarioId,
     transactionId: input.transactionId || null,
     correlationId: input.correlationId || null,
     options,
@@ -107,7 +110,7 @@ export async function executePhaseTwoScenario(input: {
     const transactionId = uuidFromHex(await sha256Hex(`${input.connectionId}:${operation}:${input.idempotencyKey}:transaction`));
     transaction = await input.store.createTransactionIfAbsent({
       transactionId,
-      scenarioId: SIMULATION_SCENARIO_ID,
+      scenarioId,
       connectionId: input.connectionId,
       initiatingTenantId: isolatedSimulationTenant(input.initiatingTenantId),
       paeTenantId: SIMULATION_TENANTS.pae,
@@ -142,6 +145,7 @@ export async function executePhaseTwoScenario(input: {
       },
       interruptAfter: options.interruptAfter,
       resumeFrom,
+      scenarioId,
     });
   } catch (error) {
     if (error instanceof Error && error.message === "SIMULATION_RUN_NOT_REPLAYABLE") {

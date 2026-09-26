@@ -10,9 +10,11 @@ import { assertTransition, lifecycleEventType, REGULATORY_CODES } from "./lifecy
 import { SandboxRepository } from "./repository";
 import { simulationFlags } from "./simulation/contracts";
 import { D1ScenarioStore } from "./simulation/d1-store";
+import { DEMO_SCENARIOS, executeDemoScenario, isDemoScenarioId } from "./simulation/demo-service";
 import { executeLifecycleEvent, getLifecycleView, LifecycleServiceError } from "./simulation/lifecycle-service";
 import { executePpfSubmission, getPpfSubmissionView, PpfServiceError, type PpfSubmissionRequest } from "./simulation/ppf-service";
 import { executePhaseTwoScenario, ScenarioServiceError, type ScenarioExecutionOptions } from "./simulation/service";
+import { buildEvidenceReport, buildUnifiedTrace } from "./simulation/trace-service";
 import type { AuthContext, InvoiceState, StoredInvoice, StoredResponse, ValidationIssue } from "./types";
 import { baselineNotices, detectInvoiceFormat, validateTransport, validateXmlStructure } from "./validation";
 
@@ -58,6 +60,37 @@ export async function route(request: Request, env: Env, _ctx?: ExecutionContext)
     return submitCanonicalTransaction(request, env, repository, auth);
   }
 
+  if (url.pathname === "/sandbox/v1/scenarios" && request.method === "GET") {
+    const auth = authenticate(request, env, true);
+    if (!auth) return problem(401, "INVALID_AUTH", "Enterprise bearer authentication is required.");
+    return json(200, { ok: true, environment: "sandbox", scenarios: DEMO_SCENARIOS, count: DEMO_SCENARIOS.length });
+  }
+
+  const finalDemoMatch = url.pathname.match(/^\/sandbox\/v1\/scenarios\/(DEMO-FR-00[1-9]|DEMO-FR-010|MATIC-DEMO)\/executions$/);
+  if (finalDemoMatch && request.method === "POST") {
+    const auth = authenticate(request, env, true);
+    if (!auth) return problem(401, "INVALID_AUTH", "Enterprise bearer authentication is required.");
+    const flags = simulationFlags(env);
+    if (!flags.dualNodeSimulation || !flags.directorySimulator || !flags.lifecycleSimulation || !flags.ppfSimulator) {
+      return problem(404, "PA_SIMULATION_FEATURE_DISABLED", "The final regulatory simulation lab is disabled for this environment.");
+    }
+    const idempotencyKey = request.headers.get("idempotency-key")?.trim() || "";
+    if (idempotencyKey.length < 16 || idempotencyKey.length > 160) return problem(400, "INVALID_IDEMPOTENCY_KEY", "Idempotency-Key must contain 16 to 160 characters.");
+    const scenarioId = decodeURIComponent(finalDemoMatch[1] ?? "");
+    if (!isDemoScenarioId(scenarioId)) return problem(404, "SCENARIO_NOT_FOUND", "The requested final demonstration scenario is not registered.");
+    const response = await executeDemoScenario({
+      env,
+      store: new D1ScenarioStore(env.DB),
+      connectionId: auth.connectionId,
+      initiatingTenantId: auth.tenantId,
+      idempotencyKey,
+      scenarioId,
+      correlationId: request.headers.get("x-correlation-id")?.trim() || undefined,
+      validateCanonical,
+    });
+    return json(response.status, response.body);
+  }
+
   if (url.pathname === "/sandbox/v1/scenarios/DEMO-FR-PIPELINE-001/executions" && request.method === "POST") {
     const auth = authenticate(request, env, true);
     if (!auth) return problem(401, "INVALID_AUTH", "Enterprise bearer authentication is required.");
@@ -71,7 +104,7 @@ export async function route(request: Request, env: Env, _ctx?: ExecutionContext)
     const remotePaOutcome = String(body.remotePaOutcome || "").trim();
     const buyerOutcome = String(body.buyerOutcome || "").trim();
     const interruptAfter = String(body.interruptAfter || "").trim();
-    if (remotePaOutcome && !["ACCEPTED", "TEMPORARY_FAILURE", "REJECTED"].includes(remotePaOutcome)) return problem(422, "INVALID_SCENARIO_OPTION", "remotePaOutcome is not supported.");
+    if (remotePaOutcome && !["ACCEPTED", "TEMPORARY_FAILURE", "TIMEOUT", "REJECTED"].includes(remotePaOutcome)) return problem(422, "INVALID_SCENARIO_OPTION", "remotePaOutcome is not supported.");
     if (buyerOutcome && !["DELIVERED", "TEMPORARY_FAILURE"].includes(buyerOutcome)) return problem(422, "INVALID_SCENARIO_OPTION", "buyerOutcome is not supported.");
     if (interruptAfter && !["DIRECTORY_RESOLVED", "PAR_ACCEPTED"].includes(interruptAfter)) return problem(422, "INVALID_SCENARIO_OPTION", "interruptAfter is not supported.");
     try {
@@ -250,6 +283,32 @@ export async function route(request: Request, env: Env, _ctx?: ExecutionContext)
     return trace
       ? json(200, { ok: true, environment: "sandbox", testEvidence: true, ...trace })
       : problem(404, "SIMULATION_TRANSACTION_NOT_FOUND", "No simulation transaction matches this identifier in the connection scope.");
+  }
+
+  const unifiedTraceMatch = url.pathname.match(/^\/sandbox\/v1\/transactions\/([^/]+)\/trace$/);
+  if (unifiedTraceMatch && request.method === "GET") {
+    const auth = authenticate(request, env, true);
+    if (!auth) return problem(401, "INVALID_AUTH", "Enterprise bearer authentication is required.");
+    const trace = await buildUnifiedTrace({
+      env,
+      store: new D1ScenarioStore(env.DB),
+      transactionId: decodeURIComponent(unifiedTraceMatch[1] ?? ""),
+      connectionId: auth.connectionId,
+    });
+    return trace ? json(200, { ok: true, ...trace }) : problem(404, "SIMULATION_TRANSACTION_NOT_FOUND", "No simulation transaction matches this identifier in the connection scope.");
+  }
+
+  const evidenceReportMatch = url.pathname.match(/^\/sandbox\/v1\/transactions\/([^/]+)\/evidence-report$/);
+  if (evidenceReportMatch && request.method === "GET") {
+    const auth = authenticate(request, env, true);
+    if (!auth) return problem(401, "INVALID_AUTH", "Enterprise bearer authentication is required.");
+    const report = await buildEvidenceReport({
+      env,
+      store: new D1ScenarioStore(env.DB),
+      transactionId: decodeURIComponent(evidenceReportMatch[1] ?? ""),
+      connectionId: auth.connectionId,
+    });
+    return report ? json(200, { ok: true, report }) : problem(404, "SIMULATION_TRANSACTION_NOT_FOUND", "No simulation transaction matches this identifier in the connection scope.");
   }
 
   if (url.pathname === "/sandbox/v1/validate/flux1" && request.method === "POST") {
@@ -615,6 +674,18 @@ async function transitionInvoice(request: Request, env: Env, repository: Sandbox
   const trace = await repository.trace(invoiceId, auth.tenantId);
   const invoice = trace?.invoice as StoredInvoice | undefined;
   if (!invoice) return problem(404, "INVOICE_NOT_FOUND", "No sandbox invoice matches this identifier.");
+  if (nextState === "PAID") {
+    return json(422, {
+      ok: false,
+      error: {
+        code: "SIMULATION_BOUNDARY",
+        message: "Status 212/payment simulation requires the shared Payment Contract.",
+        blockedBy: "PA_INTEGRATION_REQUEST_PAYMENT_CONTRACT",
+      },
+      environment: "sandbox",
+      correlationId: invoice.correlationId,
+    });
+  }
   try {
     assertTransition(invoice.currentState, nextState);
   } catch (error) {
@@ -687,7 +758,7 @@ function openApi(env: Env): string {
   return `openapi: 3.1.0
 info:
   title: D2F PA Sandbox API
-  version: 0.9.0
+  version: 1.0.0
   x-runtime-version: ${env.APP_VERSION}
   description: SANDBOX / TEST ONLY. This service is not an accredited Plateforme Agréée.
 components:
@@ -706,6 +777,11 @@ components:
       in: header
       required: true
       schema: { type: string, minLength: 16, maxLength: 200 }
+    correlationId:
+      name: X-Correlation-Id
+      in: header
+      required: false
+      schema: { type: string, format: uuid }
 security:
   - enterpriseBearer: []
 paths:
@@ -740,6 +816,7 @@ paths:
       parameters:
         - { $ref: '#/components/parameters/connectionId' }
         - { $ref: '#/components/parameters/idempotencyKey' }
+        - { $ref: '#/components/parameters/correlationId' }
       responses:
         '202': { description: Canonical transaction accepted }
         '409': { description: Idempotency conflict }
@@ -779,7 +856,7 @@ paths:
                 directoryIdentifier:
                   type: string
                   enum: [TEST-FR-BUYER-001, TEST-FR-NOT-FOUND, TEST-FR-NO-ROUTING, TEST-FR-MULTIPLE, TEST-FR-PA-NOT-FOUND, TEST-FR-ADDRESS-DISABLED, TEST-FR-TEMPORARY]
-                remotePaOutcome: { type: string, enum: [ACCEPTED, TEMPORARY_FAILURE, REJECTED] }
+                remotePaOutcome: { type: string, enum: [ACCEPTED, TEMPORARY_FAILURE, TIMEOUT, REJECTED] }
                 buyerOutcome: { type: string, enum: [DELIVERED, TEMPORARY_FAILURE] }
                 interruptAfter: { type: string, enum: [DIRECTORY_RESOLVED, PAR_ACCEPTED] }
                 resumeFromExecutionRunId: { type: string, format: uuid }
@@ -793,6 +870,28 @@ paths:
         '404': { description: Feature disabled or simulation transaction not found }
         '409': { description: Idempotency conflict }
         '422': { description: Invalid deterministic scenario option }
+  /sandbox/v1/scenarios:
+    get:
+      summary: List deterministic final regulatory simulation scenarios
+      parameters:
+        - { $ref: '#/components/parameters/connectionId' }
+      responses:
+        '200': { description: DEMO-FR-001 through DEMO-FR-010 plus the isolated MATIC-DEMO fixture }
+        '401': { description: Enterprise authentication required }
+  /sandbox/v1/scenarios/{scenarioId}/executions:
+    post:
+      summary: Execute one deterministic final demonstration scenario
+      description: Runs only synthetic sandbox fixtures and returns links to the unified trace and technical evidence report. Payment/212 remains an explicit boundary while the shared contract is unavailable.
+      parameters:
+        - { name: scenarioId, in: path, required: true, schema: { type: string, enum: [DEMO-FR-001, DEMO-FR-002, DEMO-FR-003, DEMO-FR-004, DEMO-FR-005, DEMO-FR-006, DEMO-FR-007, DEMO-FR-008, DEMO-FR-009, DEMO-FR-010, MATIC-DEMO] } }
+        - { $ref: '#/components/parameters/connectionId' }
+        - { $ref: '#/components/parameters/idempotencyKey' }
+        - { $ref: '#/components/parameters/correlationId' }
+      responses:
+        '202': { description: Scenario executed with deterministic actions and trace links }
+        '400': { description: Invalid idempotency key }
+        '401': { description: Enterprise authentication required }
+        '404': { description: Scenario or required simulator feature disabled }
   /sandbox/v1/transactions/{transactionId}:
     get:
       summary: Retrieve a connection-isolated regulatory simulation trace
@@ -804,6 +903,28 @@ paths:
         '200': { description: PAE, Directory, PAR and Buyer trace with transactionId, correlationId and executionRunId }
         '401': { description: Enterprise authentication required }
         '404': { description: Feature disabled or transaction not found in the connection scope }
+  /sandbox/v1/transactions/{transactionId}/trace:
+    get:
+      summary: Retrieve the unified end-to-end regulatory simulation trace
+      description: Aggregates INPUT, CBM, PAE, validation, directory, routing, PAR, buyer, lifecycle, e-reporting, PPF and evidence without exposing raw documents or secrets.
+      parameters:
+        - { name: transactionId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { $ref: '#/components/parameters/connectionId' }
+      responses:
+        '200': { description: Sanitized trace with message IDs, UTC timestamps, hashes, provenance and evidence references }
+        '401': { description: Enterprise authentication required }
+        '404': { description: Transaction not found in the connection scope }
+  /sandbox/v1/transactions/{transactionId}/evidence-report:
+    get:
+      summary: Generate the technical regulatory simulation evidence report
+      description: Clearly distinguishes real regulatory validation from simulated external interoperability and is not legal proof.
+      parameters:
+        - { name: transactionId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { $ref: '#/components/parameters/connectionId' }
+      responses:
+        '200': { description: Versioned technical evidence report with hashes and mandatory simulation notices }
+        '401': { description: Enterprise authentication required }
+        '404': { description: Transaction not found in the connection scope }
   /sandbox/v1/transactions/{transactionId}/lifecycle-events:
     post:
       summary: Record or replay one technical sandbox lifecycle event

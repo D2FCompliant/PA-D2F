@@ -147,7 +147,7 @@ export type SimulationStep = {
 export type SimulationExecutionStatus = "COMPLETED" | "BLOCKED" | "RETRYABLE" | "REJECTED" | "INTERRUPTED";
 
 export type SimulationExecution = {
-  scenarioId: typeof SIMULATION_SCENARIO_ID;
+  scenarioId: string;
   transactionId: string;
   correlationId: string;
   executionRunId: string;

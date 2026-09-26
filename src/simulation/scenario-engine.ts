@@ -43,6 +43,7 @@ export class PhaseTwoScenarioEngine {
   ) {}
 
   async execute(input: {
+    scenarioId?: string;
     transactionId: string;
     correlationId: string;
     executionRunId: string;
@@ -84,7 +85,7 @@ export class PhaseTwoScenarioEngine {
       retryable: boolean,
       validationStatus: "PASSED" | "FAILED" = "PASSED",
     ): SimulationExecution => ({
-      scenarioId: SIMULATION_SCENARIO_ID,
+      scenarioId: input.scenarioId ?? SIMULATION_SCENARIO_ID,
       transactionId: input.transactionId,
       correlationId: input.correlationId,
       executionRunId: input.executionRunId,
@@ -156,12 +157,13 @@ export class PhaseTwoScenarioEngine {
         endpoint: NODES[1].endpoint,
         payload: input.canonicalTransaction,
       });
-      if (remoteResult.status === "TEMPORARY_FAILURE") {
+      if (remoteResult.status === "TEMPORARY_FAILURE" || remoteResult.status === "TIMEOUT") {
         add("PAR", "PAR_TEMPORARY_FAILURE", remoteResult.provenance, "BLOCKED", {
           category: "SIMULATED_REMOTE_PA",
           destination: remoteResult.destination,
+          reason: remoteResult.status === "TIMEOUT" ? "SIMULATED_TIMEOUT" : "SIMULATED_TEMPORARY_FAILURE",
         });
-        return finish("RETRYABLE", "REMOTE_PA_TEMPORARY_FAILURE", true);
+        return finish("RETRYABLE", remoteResult.status === "TIMEOUT" ? "REMOTE_PA_TIMEOUT" : "REMOTE_PA_TEMPORARY_FAILURE", true);
       }
       add("PAR", "PAR_RECEIVED", remoteResult.provenance, "PASS", {
         category: "SIMULATED_REMOTE_PA",
@@ -209,7 +211,7 @@ export class PhaseTwoScenarioEngine {
         previousState: "DELIVERED",
         nextState: "MADE_AVAILABLE",
         actor: "PAR",
-        payload: { scenarioId: SIMULATION_SCENARIO_ID },
+        payload: { scenarioId: input.scenarioId ?? SIMULATION_SCENARIO_ID },
         now: this.now,
       });
       steps.push(...madeAvailable.steps);
@@ -221,7 +223,7 @@ export class PhaseTwoScenarioEngine {
         previousState: "MADE_AVAILABLE",
         nextState: "APPROVED",
         actor: "BUYER",
-        payload: { scenarioId: SIMULATION_SCENARIO_ID },
+        payload: { scenarioId: input.scenarioId ?? SIMULATION_SCENARIO_ID },
         now: this.now,
       });
       steps.push(...approved.steps);
@@ -243,6 +245,6 @@ function resumeCursor(execution?: SimulationExecution): ResumeCursor {
   if (!execution.outcome?.retryable) throw new Error("SIMULATION_RUN_NOT_REPLAYABLE");
   if (execution.outcome.code === "INTERRUPTED_AFTER_DIRECTORY") return "AFTER_DIRECTORY";
   if (execution.outcome.code === "INTERRUPTED_AFTER_PAR" || execution.outcome.code === "BUYER_TEMPORARY_FAILURE") return "AFTER_PAR";
-  if (execution.outcome.code === "REMOTE_PA_TEMPORARY_FAILURE") return "AFTER_ROUTING";
+  if (["REMOTE_PA_TEMPORARY_FAILURE", "REMOTE_PA_TIMEOUT"].includes(execution.outcome.code)) return "AFTER_ROUTING";
   return "START";
 }

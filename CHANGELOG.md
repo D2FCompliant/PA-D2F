@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.0.0 — 2026-09-26
+
+### Added
+
+- Complete the isolated regulatory-data PPF Simulator for Flux 10.1/10.3 and explicit 10.2/10.4 payloads.
+- Add deterministic `DEMO-FR-001` through `DEMO-FR-010` and the synthetic `MATIC-DEMO` integrator journey.
+- Add unified transaction trace and technical regulatory evidence report APIs.
+- Expose message IDs, provenance, UTC timestamps, payload hashes and evidence references across the end-to-end simulation.
+
+### Safety
+
+- Keep PPF distinct from PAR and remove the historical PPF label from invoice BT-49 routing simulation.
+- Block status 212 in every lifecycle route while the public Payment Contract remains unavailable.
+- Keep all external adapters fail-closed, all root simulator flags off and `EXTERNAL_NETWORK_DISABLED=true`.
+- Reuse D1 migration `0003`; no new migration or Business data access is introduced.
+
 ## 0.9.0 — 2026-09-26
 
 ### Added
