@@ -4,7 +4,7 @@ Independent French e-invoicing and Peppol simulation product for D2F Business Su
 
 > **SANDBOX / TEST ONLY — this application is not an accredited Plateforme Agréée and must never be represented as one.**
 
-## Implemented sandbox (0.7.0)
+## Implemented sandbox (0.8.0)
 
 - Independent Cloudflare Worker and D1 schema.
 - External network access disabled by default.
@@ -24,11 +24,11 @@ Independent French e-invoicing and Peppol simulation product for D2F Business Su
 
 The verified gaps and incremental delivery plan are in [docs/GAP-ANALYSIS.md](docs/GAP-ANALYSIS.md).
 
-## Phase 1 regulatory simulation foundation
+## Phase 2 regulatory simulation
 
-The additive route `POST /sandbox/v1/scenarios/DEMO-FR-PIPELINE-001/executions` proves an isolated synthetic PAE → simulated directory → PAR → buyer-delivery pipeline. It uses the shared canonical transaction shape and explicitly returns `SIMULATION_BOUNDARY` where a public shared regulatory contract is not yet available.
+The additive route `POST /sandbox/v1/scenarios/DEMO-FR-PIPELINE-001/executions` runs an isolated synthetic PAE → simulated directory → PAR → buyer-delivery pipeline. The connection-scoped `GET /sandbox/v1/transactions/{transactionId}` route exposes its sanitized persisted trace. The pipeline uses the shared canonical transaction shape and explicitly returns `SIMULATION_BOUNDARY` where a public shared regulatory contract is not yet available.
 
-The route is disabled by default. It requires both `PA_DUAL_NODE_SIMULATION=true` and `DIRECTORY_SIMULATOR=true`. `PPF_SIMULATOR` and `LIFECYCLE_SIMULATION` also remain `false` by default. `EXTERNAL_NETWORK_DISABLED=true` is mandatory; the Phase 1 adapters accept only `sim://` targets.
+The route remains disabled in root/default configuration and is enabled only in `env.sandbox` through `PA_DUAL_NODE_SIMULATION=true` and `DIRECTORY_SIMULATOR=true`. `PPF_SIMULATOR` and `LIFECYCLE_SIMULATION` remain `false`. `EXTERNAL_NETWORK_DISABLED=true` is mandatory; the Phase 2 adapters accept only `sim://` targets.
 
 Only synthetic tenants `D2F-PAE-SIM` and `D2F-PAR-SIM` are used. A Business tenant header never becomes a data-access key for this scenario, and the real D2F Compliant d.o.o. profile is neither read nor modified.
 

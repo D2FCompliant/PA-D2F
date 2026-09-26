@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.8.0 — 2026-09-26
+
+### Added
+
+- Execute the synthetic PAE → Directory Simulator → PAR → Buyer Simulator pipeline with eight persistent trace messages.
+- Add deterministic directory outcomes, controlled PAR/Buyer failures, idempotent replay and resumable execution runs.
+- Add the connection-isolated `GET /sandbox/v1/transactions/{transactionId}` trace route and OpenAPI 0.8.0 contract.
+
+### Safety
+
+- Activate dual-node and directory simulation only in the explicit sandbox environment.
+- Keep PPF and lifecycle simulation disabled and block every non-`sim://` target before transport.
+- Reuse the existing additive `0003` tables; no D1 migration is added.
+
 ## 0.7.0 — 2026-09-26
 
 ### Added

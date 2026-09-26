@@ -12,13 +12,13 @@
 
 ## Active scope
 
-- Phase: Phase 2 implementation checkpoint; no release, migration or deployment authorized.
+- Phase: Release 0.8.0 checkpoint; metadata and deployment validation authorized, Phase 3 forbidden.
 - Budget: MEDIUM, split into pipeline, negative/resume tests and checkpoint gates.
 - Scenario: `DEMO-FR-PIPELINE-001`.
 - New route: `POST /sandbox/v1/scenarios/DEMO-FR-PIPELINE-001/executions`.
-- Active baseline commit: `ff2cd75efe1cc9adacb00ed3469eacef22524fbe` (tag `v0.7.0`, pushed to `origin/feature/pa-sandbox-foundation`).
+- Phase 2 commit: `5719c0f463ea032f2a4c85384e0eb9b843862f3e` (pushed to `origin/feature/pa-sandbox-foundation`).
 - Migration `0003_regulatory_simulation_foundation.sql` applied only to D1 `d2f-pa-sandbox` (`b082f7af-bf47-4e3a-b24b-956cb0d2a2b2`).
-- Phase 2 release candidate remains `0.8.0`; version metadata is intentionally unchanged at this checkpoint.
+- Release metadata: `0.8.0`; rollback remains `v0.7.0` at `ff2cd75efe1cc9adacb00ed3469eacef22524fbe`.
 - Additive read route: `GET /sandbox/v1/transactions/{transactionId}`.
 
 ## Requirements
@@ -106,4 +106,4 @@
 
 ## Next exact action
 
-Await explicit review before any 0.8.0 version, commit, migration or deployment action. Do not start Phase 3.
+Complete the 0.8.0 gates, tag and sandbox-only deployment, then stop. Do not start Phase 3.

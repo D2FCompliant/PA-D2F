@@ -555,7 +555,7 @@ function openApi(env: Env): string {
   return `openapi: 3.1.0
 info:
   title: D2F PA Sandbox API
-  version: 0.8.0-candidate
+  version: 0.8.0
   x-runtime-version: ${env.APP_VERSION}
   description: SANDBOX / TEST ONLY. This service is not an accredited Plateforme Agréée.
 components:
